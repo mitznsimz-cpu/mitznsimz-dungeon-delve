@@ -215,5 +215,30 @@ console.log('\n[A9] the game has its own icon, in the Encounter Tracker\'s famil
   ok('and kept for offline play', beside.every(f => sw.indexOf("'./" + f + "'") >= 0));
 }
 
+console.log('\n[A10] About, Ko-fi and the website, to the Mitz & Simz standard');
+{
+  const KOFI = 'https://ko-fi.com/mitznsimz', WORDS = '☕ Enjoying it? Buy Pete some dice, or Mitz &amp; Simz some treats.';
+  const block = id => { const a = src.indexOf('<div id="' + id + '"'); return a < 0 ? '' : src.slice(a, src.indexOf('</div></div>', a)); };
+  const about = block('about'), chooser = block('chooser'), menu = block('menu');
+  ok('there is an About screen', !!about && /<h2 id="aboutTitle">Mitz &amp; Simz: Dungeon Delve<\/h2>/.test(about));
+  ok('with the Ko-fi line, word for word', about.indexOf('href="' + KOFI + '"') >= 0 && about.indexOf(WORDS) >= 0);
+  ok('and the website, as .co.uk', /href="https:\/\/mitznsimz\.co\.uk"/.test(about) && !/mitznsimz\.com/.test(src));
+  ok('who made it', /Made by Pete at MitzNSimz, Folkestone/.test(about));
+  ok('the other games and the tracker', ['mitznsimz-hold-the-line/', 'mitznsimz-tarokk/', 'DnD-Encounter-Tracker/'].every(r => about.indexOf('https://mitznsimz-cpu.github.io/' + r) >= 0));
+  ok('where to report bugs', /github\.com\/mitznsimz-cpu\/mitznsimz-dungeon-delve\/issues/.test(about) && /mailto:mitznsimz@gmail\.com/.test(about));
+  ok('and that nothing is tracked', /No ads and no tracking/.test(about));
+  const links = (src.match(/<a [^>]*href="https?:[^"]*"[^>]*>/g) || []);
+  ok('every link opens a new tab and sends no referrer', links.length >= 9 && links.every(a => /target="_blank"/.test(a) && /rel="noopener noreferrer"/.test(a)), links.length + ' links');
+  ok('and none carries a tracking tag', !links.some(a => /[?&](utm_|ref=|fbclid|gclid)/.test(a)));
+  ok('one discreet line on the front screen', /<p class="supportLine">/.test(chooser) && chooser.indexOf(WORDS) >= 0 && /MitzNSimz\.co\.uk<\/a>/.test(chooser));
+  ok('About from the front screen and from the menu', /id="chooserAbout"/.test(chooser) && /id="openAbout"/.test(menu) &&
+     /getElementById\('chooserAbout'\)\.addEventListener\('click', function \(e\) \{ e\.preventDefault\(\); openAbout\(\); \}\)/.test(src) &&
+     /getElementById\('openAbout'\)\.addEventListener\('click', openAbout\)/.test(src));
+  ok('never during play: no links in fights, the town or the dungeon', ['combat', 'town', 'evt'].every(id => !/ko-fi|mitznsimz\.co\.uk/.test(block(id))) &&
+     (src.match(/href="https:\/\/ko-fi\.com/g) || []).length === 3);   // front screen, menu, About
+  ok('while it is open the keys stay with it, and Escape closes it', /if \(aboutOpen\(\)\) \{ if \(e\.key === 'Escape'\) \{ closeAbout\(\); e\.preventDefault\(\); \} return; \}/.test(src));
+  ok('it shows the version in the header', /function openAbout\(\) \{\s+var v = document\.querySelector\('h1 small'\)/.test(src));
+}
+
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — '+pass+' passed, '+fail+' failed\n');
 process.exit(fail?1:0);

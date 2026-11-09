@@ -197,6 +197,27 @@
   #packNotes .warn{color:var(--gold);display:block}
   #packNow{margin-bottom:8px}
   .menuSection{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+  /* About (v4.9): who made it, the Ko-fi and the shop, the other games */
+  #about{position:fixed;inset:0;background:var(--ink);z-index:29;overflow-y:auto;display:none;padding:26px 16px}
+  #about.on{display:block}
+  #about .inner{max-width:560px;margin:0 auto}
+  #about h2{font-size:15px;margin:0 0 8px;color:var(--gold)}
+  #about h3{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--text-dim);
+    margin:18px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  #about p{font-size:12px;line-height:1.6;margin:0 0 10px}
+  #about p.small{font-size:11px;color:var(--text-dim)}
+  #about a{color:var(--gold)}
+  .aboutLinks{display:flex;flex-direction:column;gap:8px;margin:10px 0 6px}
+  .aboutLinks a{display:block;border:1px solid var(--line);padding:10px 12px;color:var(--text);text-decoration:none}
+  .aboutLinks a b{display:block;color:var(--gold);font-size:13px;font-weight:600}
+  .aboutLinks a span{display:block;color:var(--text-dim);font-size:11px;margin-top:2px}
+  .aboutLinks a.kofi{border-color:var(--gold-dim)}
+  .aboutLinks a:hover,.aboutLinks a:focus-visible{border-color:var(--gold)}
+  #about .acts{margin-top:18px}
+  #about .acts button{height:40px;min-width:140px}
+  .supportLine{font-size:11px;line-height:1.7;color:var(--text-dim);margin:24px 0 0;text-align:center}
+  .supportLine a{color:var(--gold-dim)}
+  .supportLine a:hover,.supportLine a:focus-visible{color:var(--gold)}
   .menuSection .acts{display:flex;gap:6px;flex-wrap:wrap}
   .menuSection .acts button{flex:1 1 auto;min-width:110px;height:40px;font-size:11px}
   .settings .vol{flex:1 1 140px;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);min-height:40px}
@@ -355,6 +376,9 @@
   <div id="chooseList"></div>
   <div id="chooseNotes"></div>
   <input type="file" id="choosePackFile" accept="application/json,.json" hidden>
+  <p class="supportLine"><a href="#about" id="chooserAbout">About</a> &middot;
+    <a class="kofi" href="https://ko-fi.com/mitznsimz" target="_blank" rel="noopener noreferrer">☕ Enjoying it? Buy Pete some dice, or Mitz &amp; Simz some treats.</a> &middot;
+    <a href="https://mitznsimz.co.uk" target="_blank" rel="noopener noreferrer">MitzNSimz.co.uk</a></p>
 </div></div>
 
 <div id="roster"><div class="inner">
@@ -414,8 +438,35 @@
     </div>
   </div>
   <div class="menuSection">
+    <h2>About</h2>
+    <p class="meta">Made by Pete at MitzNSimz. <a href="https://ko-fi.com/mitznsimz" target="_blank" rel="noopener noreferrer">☕ Enjoying it? Buy Pete some dice, or Mitz &amp; Simz some treats.</a></p>
+    <div class="acts"><button id="openAbout">About Dungeon Delve</button></div>
+  </div>
+  <div class="menuSection">
     <div class="acts"><button id="closeMenu">Back to the delve</button></div>
   </div>
+</div></div>
+<div id="about" role="dialog" aria-labelledby="aboutTitle"><div class="inner">
+  <h2 id="aboutTitle">Mitz &amp; Simz: Dungeon Delve</h2>
+  <p>Version <span id="aboutVersion">4.9</span>. Made by Pete at MitzNSimz, Folkestone. The minis are drawn in code,
+    unpainted, the way they come off the printer. Mitz and Simz supervised.</p>
+  <div class="aboutLinks">
+    <a class="kofi" href="https://ko-fi.com/mitznsimz" target="_blank" rel="noopener noreferrer"><b>☕ Enjoying it? Buy Pete some dice, or Mitz &amp; Simz some treats.</b><span>ko-fi.com/mitznsimz</span></a>
+    <a href="https://mitznsimz.co.uk" target="_blank" rel="noopener noreferrer"><b>🛡 MitzNSimz.co.uk</b><span>3D-printed miniatures and tools for Dungeon Masters.</span></a>
+  </div>
+  <h3>Also from Mitz &amp; Simz</h3>
+  <div class="aboutLinks">
+    <a href="https://mitznsimz-cpu.github.io/mitznsimz-hold-the-line/" target="_blank" rel="noopener noreferrer"><b>Hold the Line</b><span>Hold the Cat &amp; Mouse against whatever comes up from below.</span></a>
+    <a href="https://mitznsimz-cpu.github.io/mitznsimz-tarokk/" target="_blank" rel="noopener noreferrer"><b>Tarokk</b><span>Hungarian Tarokk against three computer players.</span></a>
+    <a href="https://mitznsimz-cpu.github.io/DnD-Encounter-Tracker/" target="_blank" rel="noopener noreferrer"><b>⚔ D&amp;D Encounter Tracker</b><span>Our free combat tracker for the table.</span></a>
+  </div>
+  <h3>Bugs and ideas</h3>
+  <p>Tell us on <a href="https://github.com/mitznsimz-cpu/mitznsimz-dungeon-delve/issues" target="_blank" rel="noopener noreferrer">GitHub</a>,
+    or email <a href="mailto:mitznsimz@gmail.com?subject=Dungeon%20Delve">mitznsimz@gmail.com</a>.</p>
+  <p class="small">No ads and no tracking: your saves stay in this browser, and the game sends nothing anywhere.
+    The code is MIT-licensed; the Mitz &amp; Simz characters and the miniature art are &copy; MitzNSimz.
+    Wall textures are CC0, from 3dtextures.me.</p>
+  <div class="acts"><button id="closeAbout">Back</button></div>
 </div></div>
 <div id="combat">
   <div class="top"><h2 id="ctitle">Combat</h2><span id="cturn"></span></div>
@@ -10919,6 +10970,15 @@ function openMenu() {
   document.getElementById('menu').classList.add('on');
 }
 
+/* ---------- About (v4.9) ---------- */
+function openAbout() {
+  var v = document.querySelector('h1 small'), out = document.getElementById('aboutVersion');
+  if (v && out) out.textContent = v.textContent.replace(/^[\s\u2014-]*v?/, '');   // the version in the header
+  document.getElementById('about').classList.add('on');
+}
+function closeAbout() { document.getElementById('about').classList.remove('on'); }
+function aboutOpen() { return document.getElementById('about').classList.contains('on'); }
+
 /* ---------- loading an adventure from a file ---------- */
 function describePack(p) {
   return p.name + ' v' + p.version + ' \u2014 ' + p.floors.length + ' floors, ' +
@@ -14636,6 +14696,7 @@ addEventListener('keydown', function (e) {
   // typing a campaign name used to walk the party about; keys belong to the field
   var tag = e.target && e.target.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (aboutOpen()) { if (e.key === 'Escape') { closeAbout(); e.preventDefault(); } return; }
   var k = e.key.toLowerCase();
   if (k === 'm') {
     setSound(!PREFS.sound);
@@ -14732,6 +14793,9 @@ addEventListener('keydown', function (e) {
 })();
 
 document.getElementById('menuBtn').addEventListener('click', openMenu);
+document.getElementById('openAbout').addEventListener('click', openAbout);
+document.getElementById('closeAbout').addEventListener('click', closeAbout);
+document.getElementById('chooserAbout').addEventListener('click', function (e) { e.preventDefault(); openAbout(); });
 document.getElementById('invBtn').addEventListener('click', openInv);
 document.getElementById('vicContinue').addEventListener('click', function () {
   document.getElementById('victory').classList.remove('on');
