@@ -41,7 +41,7 @@ On a touch screen, use the on-screen pad to move and turn. It also has Use, Sear
 | `msdd_assets.js` | Wall textures. Optional: without it the walls are drawn as masonry |
 | `motion.js`, `sound.js` | The fight animation and sound modules, shared with Hold the Line, a sister Mitz & Simz game. Optional |
 | `mitznsimz_minis.js` | The shared miniatures library. The game has a copy built in, and the tests check that the copy matches this file |
-| `sw.js`, `msdd.webmanifest`, `icon.svg` | Offline play, and installing it as an app |
+| `sw.js`, `msdd.webmanifest`, `icon.svg`, `icon-*.png` | Offline play, and installing it as an app with its own icon |
 | `packs/` | The adventure as a standalone pack, for editing. `docs/pack_authoring.md` explains the format |
 | `tests/` | 28 headless test runners, and `run_gate.sh`, which runs them all |
 | `tools/party_balance.js` | The party balance test: plays the campaign and an 8-floor delve with 13 party mixes. `node tools/party_balance.js` |
@@ -55,7 +55,7 @@ You need [Node](https://nodejs.org). From the top folder:
 sh tests/run_gate.sh
 ```
 
-It runs 28 runners with 2,190 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
+It runs 28 runners with 2,201 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
 
 ## Licence
 
