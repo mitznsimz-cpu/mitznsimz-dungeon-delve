@@ -55,7 +55,7 @@ You need [Node](https://nodejs.org). From the top folder:
 sh tests/run_gate.sh
 ```
 
-It runs 28 runners with 2,201 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
+It runs 28 runners with 2,215 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
 
 ## Licence
 
@@ -64,3 +64,7 @@ The code is under the MIT licence (see `LICENSE`): use it, change it, share it. 
 ## Credits
 
 Made by Pete at [MitzNSimz](https://mitznsimz.co.uk), Folkestone.
+
+☕ Enjoying it? [Buy Pete some dice, or Mitz & Simz some treats.](https://ko-fi.com/mitznsimz)
+
+Also from Mitz & Simz: [Hold the Line](https://mitznsimz-cpu.github.io/mitznsimz-hold-the-line/), [Tarokk](https://mitznsimz-cpu.github.io/mitznsimz-tarokk/) and the [D&D Encounter Tracker](https://mitznsimz-cpu.github.io/DnD-Encounter-Tracker/).
