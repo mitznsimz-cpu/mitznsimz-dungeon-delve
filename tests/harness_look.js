@@ -218,14 +218,23 @@ console.log('\n[L12] combat reads as a battle line');
 const cv = src.slice(src.indexOf('function drawFoes'), src.indexOf('function renderRosterList'));
 ok('ranks run left to right, not stacked', /THEIR BACK/.test(cv) && /YOUR FRONT/.test(cv));
 ok('their front and our front meet in the middle',
-   /band\(foeFrontList, c\.w \* 0\.24, c\.w \* 0\.47/.test(cv) &&
+   /band\(foeFrontList, c\.w \* foeCut, c\.w \* 0\.47/.test(cv) &&
    // v4.8: someone freed from a cell takes the near end of our front rank
-   /var frontX0 = al \? 0\.585 : 0\.53;/.test(cv) && /band\(pFront,\s+c\.w \* frontX0, c\.w \* 0\.76/.test(cv));
+   /var frontX0 = al \? 0\.585 : 0\.53;/.test(cv) && /band\(pFront,\s+c\.w \* frontX0, c\.w \* ourCut/.test(cv));
 ok('back ranks sit on the outside',
-   /band\(foeBackList,\s+c\.w \* 0\.02, c\.w \* 0\.24/.test(cv) &&
-   /band\(pBack,\s+c\.w \* 0\.76, c\.w \* 0\.98/.test(cv));
-ok('figures are capped, not scaled to the panel', /Math\.min\(c\.h \* 0\.46, step \* 1\.35, 128\)/.test(cv),
-   'figure size would balloon on a wide screen');
+   /band\(foeBackList,\s+c\.w \* 0\.02, c\.w \* foeCut/.test(cv) &&
+   /band\(pBack,\s+c\.w \* ourCut, c\.w \* 0\.98/.test(cv));
+// v4.9: each side's half is shared out by how many stand in each rank
+const shareSrc = cv.match(/var share = function \(nBack, nFront\) \{[\s\S]*?\n  \};/);
+const share = shareSrc ? new Function(shareSrc[0] + '; return share;')() : null;
+ok('a lone rank has its whole half of the line', !!share && share(0, 3) === 0 && share(2, 0) === 1);
+ok('two ranks share it by headcount, back figures needing a little less',
+   !!share && Math.abs(share(2, 2) - 0.8 / 1.8) < 1e-9 && share(1, 3) < share(3, 1));
+// v4.9: the 128px ceiling went; the stage now has a size of its own on every
+// screen, so figures follow it, up to a ceiling for very big monitors
+const ffm = +(src.match(/var FIGHT_FIGURE_MAX = (\d+);/) || [0, 0])[1];
+ok('figures scale with the stage, up to a ceiling', /Math\.min\(c\.h \* 0\.50, step \* 1\.7, FIGHT_FIGURE_MAX\)/.test(cv) &&
+   ffm >= 200 && ffm <= 320, String(ffm));
 ok('every rank is captioned', (cv.match(/THEIR BACK|THEIR FRONT|YOUR FRONT|YOUR BACK/g)||[]).length===4);
 ok('band order is fixed by position, not array order', /\.sort\(byPos\)/.test(cv),
    'characters would jump sideways after a rank swap');
@@ -233,12 +242,13 @@ ok('band order is fixed by position, not array order', /\.sort\(byPos\)/.test(cv
 console.log('\n[L13] whose turn it is, unmistakably');
 ok('the active hero gets a pool of light', /function spotlight/.test(cv));
 ok('and a marker above them', /function marker/.test(cv));
-ok('their name is highlighted', /label\(x, ground, m\.name\.slice\(0, 8\)[\s\S]{0,60}isNow \|\| isAlly\)/.test(cv),
+ok('their name is highlighted', /label\(x, ground, nm \+[\s\S]{0,90}isNow \|\| isAlly\)/.test(cv),
    'the active hero name is no longer emphasised');
 ok('the banner names them large', /#cturn \.who\{color:var\(--gold\);font-size:14px/.test(src));
 ok('the banner states their rank', /front rank' : 'back rank'/.test(src));
 ok('the banner says when the enemy is acting', /they act/.test(src));
-ok('the combat panel is height-capped', /max-height:46vh/.test(src));
+// v4.9: the panel is a grid now; on a phone the figures get a band of their own
+ok('the figures get a band of their own on a phone', /grid-template-rows:auto clamp\(130px,50vw,30vh\) minmax\(48px,1fr\)/.test(src));
 ok('actions spread out on wide screens', /@media \(min-width:760px\)\{#acts\{grid-template-columns:repeat\(4,1fr\)\}/.test(src));
 
 console.log('\n[L14] you can see what you are about to hit');
@@ -634,6 +644,40 @@ ok('a named foe takes no article', named === 'The Shade of Ashkeld and 2 Shade W
 ok('an ordinary one still does', describeFoes([{ name: 'Ghoul' }]) === 'a Ghoul' && describeFoes([{ name: 'Imp' }]) === 'an Imp');
 ok('the line starts with a capital', /beaten = beaten\.charAt\(0\)\.toUpperCase\(\) \+ beaten\.slice\(1\);/.test(src) &&
    /say\(beaten \+ ' defeated \\u2014 '/.test(src));
+
+console.log('\n[L29] the fight screen fits the device (v4.9)');
+ok('the fight is a grid: figures and log, then the list, the target line and the actions',
+   /<div id="cbody">\s*<div id="foeWrap"><canvas id="foes"><\/canvas><\/div>\s*<div id="clog"><\/div>\s*<\/div>\s*<div id="cside">\s*<div id="cRoster"><\/div>\s*<div id="tgt"><\/div>\s*<div id="acts"><\/div>/.test(src));
+ok('landscape puts the list and the actions in a column on the right',
+   /grid-template-rows:auto minmax\(0,1fr\);grid-template-areas:"top top" "main side"/.test(src));
+ok('an upright tablet gives the figures the whole width',
+   /grid-template-areas:"top top" "stage stage" "log list" "tgt tgt" "acts acts"/.test(src));
+ok('a phone held sideways keeps the figures down the left',
+   /grid-template-areas:"top top" "stage tgt" "stage acts" "log acts"/.test(src));
+ok('on a phone the List button swaps the log for the list',
+   /id="cListBtn"/.test(src) && /#combat\.showList #cRoster\{display:block\}/.test(src) &&
+   /#combat\.showList #clog\{display:none\}/.test(src) && /classList\.toggle\('showList'\)/.test(src));
+ok('a caster\'s long list of actions scrolls instead of pushing the figures off',
+   /#acts\{grid-area:acts;min-height:0;overflow-y:auto;/.test(src));
+ok('and a glow at the edge says there is more', /background-attachment:local,local,scroll,scroll/.test(src));
+ok('a long spell name wraps instead of being cut', /#acts button\{height:auto;min-height:40px;/.test(src));
+ok('the canvas never sizes its own panel', /#foeWrap\{grid-area:stage;min-height:0;contain:size\}/.test(src));
+ok('the motion cell grows with the stage, so a lunge still reaches',
+   /STAGE\.cell = Math\.max\(24, Math\.min\(c\.h \* 0\.42, 240\)\)/.test(src));
+ok('names are clipped to their slot', /var nm = clipTo\(m\.name\.slice\(0, 10\), step\);/.test(cv) && /function clipTo\(text, room\)/.test(cv));
+ok('TARGET goes on a friend only where it fits', /isAlly && fits\(nm \+ '  \\u25c0 TARGET', step\)/.test(cv));
+ok('the bar and the name drop below a big figure\'s base',
+   /function sizeUnder\(hgt\) \{ under = Math\.max\(0, hgt \* 0\.11 - 5\);/.test(cv) && /ground \+ 9 \+ LBL \+ under/.test(cv));
+ok('captions sit under each rank wherever it falls', /'THEIR FRONT', c\.w \* \(foeCut \+ 0\.47\) \/ 2/.test(cv));
+
+console.log('\n[L30] the fight\'s list has its own name (v4.9)');
+// It shared the id "roster" with the party-making screen, so the fight wrote
+// its list into that screen: the list never showed in a fight, and making a
+// fresh party after any fight crashed, its slots wiped.
+ok('only one element is called roster', (src.match(/id="roster"/g) || []).length === 1);
+ok('the fight fills its own list', /var host = document\.getElementById\('cRoster'\);/.test(src) &&
+   !/function renderRosterList\(\) \{\s*var host = document\.getElementById\('roster'\)/.test(src));
+ok('the list\'s style is its own', /#cRoster\{flex:1 1 42%;/.test(src) && !/#roster\{flex:1 1 42%;/.test(src));
 
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);

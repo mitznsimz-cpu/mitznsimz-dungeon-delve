@@ -177,11 +177,22 @@ sideways, a phone gets the wide layout in miniature. Monsters, and the merchant,
 now stand in the middle of their square and a little taller, so they are easy to
 make out a square or two ahead.
 
+Fights follow suit. On a wide screen the figures and the log fill the left,
+and the list of who is who (every foe, and the party with their BP and MP) sits
+on the right above the target line and the actions. On a phone held upright,
+the figures get a band of their own, and the **List** button at the top swaps
+the log for that list. Held sideways, the figures fill the left and the actions
+the right. Figures grow with the screen. A caster's long list of actions
+scrolls, with a gold glow at the edge when there is more below. When the enemy
+wins the initiative they now take their turn first. Before, the fight froze on
+"…" whenever that happened.
+
 To check the layout at thirteen screen sizes, from a small phone to a big
 monitor, the repo has `tools/layout_shots.js`: run
 `node tools/layout_shots.js index.html <folder>` (it needs Playwright,
 `npm install playwright`). It saves a screenshot of each size and prints the size
 of the view and the map, and whether anything spills off the screen.
+`tools/fight_shots.js` does the same for the fight screen.
 
 ### Controls
 
@@ -194,6 +205,7 @@ of the view and the map, and whether anything spills off the screen.
 - **Search** — look for secret doors, and for traps here and on the four squares around you
 - **Tap the automap** — enlarge, tap again to shrink (on a phone held upright it sits in the corner of the view)
 - **Tap the fight** while a turn plays out — skip to the end of it
+- **List** (top right of a fight, on a phone) — swap the log for the list of who is who
 
 ### Saves
 
