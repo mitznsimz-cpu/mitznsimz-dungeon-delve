@@ -326,13 +326,15 @@ ok('an unknown facing defaults to front rather than throwing',
 ok('the party asks to look left', /\(m\.bp > 0 \? (1|heldAlpha) : 0\.2\) \* \(e \? Math\.max\(0, Math\.min\(1, e\.alpha\)\) : 1\), 'left', heroName/.test(src));
 ok('the foes ask to look right', /\(alive \? 1 : 0\.15\) \* ea, 'right'/.test(src));
 ok('a corridor monster is left facing the viewer',
-   /h \* 0\.62, lit, 1, false\)/.test(src),
+   /mH \* MINI_IN_VIEW, mLit, 1, false\)/.test(src),
    'a monster ahead of you is seen head-on, not from the side');
 
 console.log('\n[R6] both views use them');
 ok('combat draws sprites', /drawSprite\(g, m\.ref/.test(src));
-ok('the corridor draws sprites', /drawSprite\(g, lead, midX/.test(src));
-ok('the corridor scales them down for distance', /h \* 0\.62/.test(src),
+ok('the corridor draws sprites', /drawSprite\(g, lead, mX/.test(src));
+// v4.9: mid-square and taller (MINI_IN_VIEW), still a share of the passage height
+ok('the corridor scales them down for distance', /mH \* MINI_IN_VIEW/.test(src) &&
+   +(src.match(/var MINI_IN_VIEW = ([\d.]+);/) || [0, 9])[1] < 0.9,
    'a corridor monster should not fill the cell');
 ok('loading redraws whatever is open',
    /loadSprites\(function \(\) \{ if \(party\.length\) redraw\(\); if \(cst\) renderCombat\(\); \}\)/.test(src));

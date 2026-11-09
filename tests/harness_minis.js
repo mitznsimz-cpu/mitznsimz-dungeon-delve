@@ -291,7 +291,8 @@ ok('a narrow one is not shrunk by it', (()=>{ const a=mockCtx({}), b=mockCtx({})
 // v4.5: combat figures are drawn through the stage, at (fx, fy) after motion
 ok('drawn monsters stand at the same height a render would', /drawSprite\(g, m\.ref, (x, ground|fx, fy), hgt \* 1\.05/.test(src));
 ok('combat passes the character, not just the class', /drawHero\(g, (x, ground|fx, fy), hgt \* 1\.05, m\.class, woundState\(m\), (1|heldLit), (pHit|flashNow), m(, pFelled)?\)/.test(src));
-ok('the corridor draws at a render\'s height too', /drawMini\(g, midX, bot - h \* 0\.04, h \* 0\.62,/.test(src));
+ok('the corridor draws at a render\'s height too', /drawMini\(g, mX, mBot - mH \* 0\.03, mH \* MINI_IN_VIEW,/.test(src) &&
+   /drawSprite\(g, lead, mX, mBot - mH \* 0\.03, mH \* MINI_IN_VIEW,/.test(src));
 ok('renders still come first', /if \(!drawSprite\(g, m\.ref[\s\S]{0,300}drawMini\(/.test(src) && /if \(!drewHero\) \{[\s\S]{0,120}drawHero\(/.test(src));
 ok('?figures=drawn shows the drawn library everywhere', /figures=drawn/.test(src) && /if \(FIGURES_DRAWN\) return false;/.test(src));
 ok('the roster offers both sexes for every class', (()=>{
@@ -338,7 +339,7 @@ ok('at eye level the base is flatter', M.miniFoot(LIB.goblin, 'front') < M.miniF
 ok('and the figure still stands on the line', (() => { const g = mockCtx({}); M.drawFigure(g, 'goblin', 100, 200, 100, { view: 'front' });
    const d = g.calls.find(c => c[0] === 'drawImage'), b = M.miniBounds(LIB.goblin), u = d[2][2] / (b[2] - b[0] + 2 * PAD);
    return Math.abs(d[3][5] - 200 + M.miniFoot(LIB.goblin, 'front') * u) < 0.5; })());
-ok('the corridor draws at eye level, combat on the table', /lit, false, lead, null, 0, 'front'\)/.test(src) && !/drawMini\(g, x, ground[^;]*'front'/.test(src));
+ok('the corridor draws at eye level, combat on the table', /mLit, false, lead, null, 0, 'front'\)/.test(src) && !/drawMini\(g, x, ground[^;]*'front'/.test(src));
 ok('a neutral figure stands on walnut', (() => { const g = mockCtx({}); M.miniDraw(g, LIB.goblin, LW, M.MINI_PLASTIC, { faction: 'neutral' });
    return g.calls.some(c => c[0] === 'fill' && c[1] === M.MINI_FACTIONS.neutral.side); })());
 ok('the old words still work: foe is a monster, boss a monster with a gold rim', (() => {
