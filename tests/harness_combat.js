@@ -458,5 +458,42 @@ ok('the Scroll of Revealing now reveals', (()=>{ const p = freshParty(30); p[0].
 ok('in a fight the inventory spends the turn, only for the one whose turn it is',
    /if \(inFight && turnOf !== ci\) \{ u\.disabled = true;/.test(src) && /doAction\('item:' \+ i/.test(src));
 
+console.log('\n[C12] the enemy can go first without freezing the fight (v4.9)');
+// When a foe won initiative, at the start or when a new round's order put one
+// first, the screen sat on "..." for good: it only moved on after a party
+// action. The core was always fine (the simulator advances when no hero is up);
+// the screen now does the same.
+(() => {
+  let opened = 0, handedBack = 0, newRound = 0, newRoundBack = 0;
+  for (let s = 0; s < 300; s++) {
+    const rg = C.makeRng(9000 + s), p = fp(9000 + s);
+    const st = C.beginCombat(p, C.makeEncounter('mn.goblin', rg), rg);
+    if (C.activeActor(st) === null && !st.outcome) {
+      opened++;
+      let g = 0; while (!st.outcome && C.activeActor(st) === null && g++ < 6) C.advanceCombat(p, st, rg);
+      if (st.outcome || C.activeActor(st) !== null) handedBack++;
+    }
+    // play on: whenever a round opens with them, one more advance hands it back
+    let guard = 0;
+    while (!st.outcome && guard++ < 60) {
+      const i = C.activeActor(st);
+      if (i === null) { newRound++; let g = 0; while (!st.outcome && C.activeActor(st) === null && g++ < 6) C.advanceCombat(p, st, rg);
+                        if (st.outcome || C.activeActor(st) !== null) newRoundBack++; continue; }
+      C.partyAction(p, st, 'attack', 0, rg); C.advanceCombat(p, st, rg);
+    }
+  }
+  ok('fights do open with the enemy', opened > 20, opened + ' of 300');
+  ok('and running their turns always hands the turn to a hero, or ends it', handedBack === opened, handedBack + '/' + opened);
+  ok('rounds that open with the enemy settle the same way', newRound > 0 && newRoundBack === newRound, newRoundBack + '/' + newRound);
+})();
+ok('the screen runs their turns whenever one of them is up',
+   /function foesGoFirst\(\) \{\s*if \(!cst \|\| cst\.outcome \|\| activeActor\(cst\) !== null\) return false;/.test(src) &&
+   /while \(cst && !cst\.outcome && activeActor\(cst\) === null && guard\+\+ < 6\) advanceCombat\(party, cst, actionRng\);/.test(src));
+ok('and plays them on the stage', /if \(stA\) stagePlay\(null, null, selFoe, null, stA, stA, stageSnapshot\(party, cst, stageMat\)\);/.test(src));
+ok('when a fight starts', /renderCombat\(\);\s*settleFoes\(\);\s*\/\/ they may have the initiative/.test(src));
+ok('after each action', /renderCombat\(\);\s*settleFoes\(\);\s*\/\/ a new round may open with the enemy/.test(src));
+ok('and once a turn has finished playing out', /renderActions\(\);\s*settleFoes\(\);\s*\/\/ and if the enemy is up next/.test(src));
+ok('but never while a turn is still playing', /function settleFoes\(\) \{\s*if \(STAGE\.playing\) return;/.test(src));
+
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);

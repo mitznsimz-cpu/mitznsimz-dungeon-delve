@@ -367,7 +367,9 @@ ok('a figure wears its pose for the move it is making, when it has one',
    /var STAGE_POSES = \{ lunge: 'strike', strike: 'strike', cast: 'cast', shake: 'hurt', knock: 'hurt', dodge: 'guard' \};/.test(src) &&
    /stagePose = stagePoseOf\(sp, now\);/.test(src));
 ok('hit-stop goes to motion\'s hold()', /STAGE\.fxm\.hold\(stageSprite\(key\), t0, c\.dur\)/.test(src));
-ok('the snapshots know what each figure is made of', (src.match(/stageSnapshot\(party, cst, stageMat\)/g) || []).length === 3 &&
+// three for a party action and its answer; v4.9 adds two for the foes' turns
+// when they have the initiative
+ok('the snapshots know what each figure is made of', (src.match(/stageSnapshot\(party, cst, stageMat\)/g) || []).length === 5 &&
    /function stageMat\(x\) \{/.test(src));
 // v4.9: the page asks for a paw each half-turn, so the cats still alternate swipe by swipe
 ok('Mitz and Simz take turns at the paw', /PREFS\.paws === false \? null : STAGE\.paw % 2/.test(src) && /STAGE\.paw\+\+/.test(src));

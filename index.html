@@ -343,7 +343,7 @@
   @media (min-width:760px){#acts{grid-template-columns:repeat(4,1fr)}
     #acts button.wide{grid-column:span 2}}
   #acts button{height:42px;font-size:12px}
-  #roster{flex:1 1 42%;border:1px solid var(--line);overflow-y:auto;padding:4px}
+  #cRoster{flex:1 1 42%;border:1px solid var(--line);overflow-y:auto;padding:4px}
   .rrow{display:flex;justify-content:space-between;gap:6px;padding:4px 6px;
     font:11px/1.35 ui-monospace,Menlo,monospace;cursor:pointer;border:1px solid transparent}
   .rrow.sel{border-color:var(--gold);color:var(--gold)}
@@ -455,6 +455,84 @@
     #pad [data-act=use]{grid-area:2/3;height:38px;white-space:normal;line-height:1.15;padding:0 2px;font-size:11px}
     #pad [data-act=rest]{grid-area:3/1/4/4;height:30px;font-size:11px}
   }
+
+  /* ---------- v4.9 layout: the fight screen ----------
+     The figures take the space. The list of who is who (it never showed before:
+     it shared the party screen's id) sits beside them, or swaps with the log on
+     a phone. A caster's long list of actions scrolls rather than pushing the
+     figures off the screen. */
+  #combat{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right))
+          max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+  #combat.on{display:grid;gap:8px;grid-template-columns:minmax(0,1fr);
+    grid-template-rows:auto clamp(130px,50vw,30vh) minmax(48px,1fr) auto minmax(0,auto);
+    grid-template-areas:"top" "stage" "log" "tgt" "acts"}
+  #cbody,#cside{display:contents}
+  #combat .top{grid-area:top;gap:8px;align-items:center}
+  #cturn{flex:1 1 auto}
+  #foeWrap{grid-area:stage;min-height:0;contain:size}
+  #clog{grid-area:log;min-height:0;contain:size}
+  #cRoster{grid-area:log;display:none;min-height:0;contain:size;overscroll-behavior:contain}
+  #tgt{grid-area:tgt;margin-bottom:0}
+  #acts{grid-area:acts;min-height:0;overflow-y:auto;overscroll-behavior:contain;align-content:start;
+    /* when there are more actions below, a gold glow at the edge says so */
+    background:linear-gradient(var(--ink) 30%,rgba(14,10,8,0)) center top,
+      linear-gradient(rgba(14,10,8,0),var(--ink) 70%) center bottom,
+      radial-gradient(farthest-side at 50% 0,rgba(227,169,60,.30),rgba(227,169,60,0)) center top,
+      radial-gradient(farthest-side at 50% 100%,rgba(227,169,60,.30),rgba(227,169,60,0)) center bottom;
+    background-repeat:no-repeat;background-size:100% 28px,100% 28px,100% 10px,100% 10px;
+    background-attachment:local,local,scroll,scroll}
+  /* a long spell name wraps onto a second or third line instead of being cut */
+  #acts button{height:auto;min-height:40px;line-height:1.2;padding:4px 6px}
+  #cListBtn{display:none;flex:0 0 auto;height:28px;padding:0 10px;font-size:11px}
+  #cListBtn[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}
+  #combat.showList #cRoster{display:block}
+  #combat.showList #clog{display:none}
+  /* a phone held upright has no room for both: the List button swaps them */
+  @media (max-width:599px){#cListBtn{display:inline-block}}
+  @media (max-width:599px) and (max-height:620px){#acts button{min-height:34px}}
+  /* upright but wider (a tablet): the figures across the whole width, the log
+     and the list side by side under them */
+  @media (min-width:600px){
+    #combat.on{grid-template-columns:minmax(0,1fr) minmax(220px,38%);
+      grid-template-rows:auto clamp(220px,56vw,50vh) minmax(80px,1fr) auto minmax(0,auto);
+      grid-template-areas:"top top" "stage stage" "log list" "tgt tgt" "acts acts"}
+    #cRoster,#combat.showList #cRoster{grid-area:list;display:block}
+    #combat.showList #clog{display:block}
+    #acts button{min-height:42px}
+  }
+  /* landscape: the figures and the log on the left; the list, the target
+     line and the actions in a column on the right */
+  @media (min-width:640px) and (min-aspect-ratio:5/4){
+    #combat.on{grid-template-columns:minmax(0,1fr) clamp(240px,28vw,360px);
+      grid-template-rows:auto minmax(0,1fr);grid-template-areas:"top top" "main side"}
+    #cbody{grid-area:main;display:flex;flex-direction:column;gap:8px;min-height:0;max-height:none}
+    #cside{grid-area:side;display:flex;flex-direction:column;gap:8px;min-height:0}
+    #foeWrap{flex:1 1 0}
+    #clog{flex:0 0 clamp(90px,20vh,200px);contain:none}
+    #cRoster,#combat.showList #cRoster{display:block;flex:1 1 0;min-height:72px;contain:none}
+    #combat.showList #clog{display:block}
+    #tgt{flex:0 0 auto}
+    #acts{flex:0 1 auto;grid-template-columns:repeat(2,1fr)}
+    #acts button.wide{grid-column:1/-1}
+  }
+  /* sideways on a phone: the figures fill the left with the log under them;
+     the target line and the actions on the right. The List button swaps the
+     log for the list. */
+  @media (min-width:640px) and (min-aspect-ratio:5/4) and (max-height:560px){
+    #combat.on{gap:6px;grid-template-columns:minmax(0,1fr) clamp(240px,30vw,320px);
+      grid-template-rows:auto auto minmax(0,1fr) clamp(48px,16vh,72px);
+      grid-template-areas:"top top" "stage tgt" "stage acts" "log acts"}
+    #cbody,#cside{display:contents}
+    #foeWrap{grid-area:stage}
+    #clog{grid-area:log;contain:size;padding:4px 8px;font-size:11px}
+    #cRoster,#combat.showList #cRoster{grid-area:log;display:none;contain:size}
+    #combat.showList #cRoster{display:block}
+    #combat.showList #clog{display:none}
+    #cListBtn{display:inline-block}
+    #tgt{font-size:10px;padding:3px 6px}
+    #acts{grid-area:acts;gap:4px}
+    #acts button{min-height:34px;font-size:11px;line-height:1.15;padding:3px 4px}
+  }
   @media (prefers-reduced-motion:reduce){button{transition:none}}
 </style>
 </head>
@@ -564,14 +642,17 @@
   <div class="acts"><button id="closeAbout">Back</button></div>
 </div></div>
 <div id="combat">
-  <div class="top"><h2 id="ctitle">Combat</h2><span id="cturn"></span></div>
+  <div class="top"><h2 id="ctitle">Combat</h2><span id="cturn"></span>
+    <button id="cListBtn" type="button" aria-pressed="false" title="Swap the log for the list of who is who">List</button></div>
   <div id="cbody">
     <div id="foeWrap"><canvas id="foes"></canvas></div>
-    <div id="roster"></div>
+    <div id="clog"></div>
   </div>
-  <div id="clog"></div>
-  <div id="tgt"></div>
-  <div id="acts"></div>
+  <div id="cside">
+    <div id="cRoster"></div>
+    <div id="tgt"></div>
+    <div id="acts"></div>
+  </div>
 </div>
 <div id="town"><div class="inner">
   <span id="purse"></span>
@@ -10049,6 +10130,7 @@ function stageRun() {
     STAGE.playing = false;
     if (acts) acts.classList.remove('busy');
     renderActions();
+    settleFoes();                            // and if the enemy is up next, they go (v4.9)
   };
   STAGE.raf = requestAnimationFrame(tick);
 }
@@ -10096,12 +10178,17 @@ function stagePlay(actor, action, idx, held, snapA, snapB, snapC) {
   if (first.cues.length || second.cues.length) stageRun();
 }
 
+/* v4.9: the tallest a figure stands in a fight, so a huge monitor does not
+   give you figures a foot high. Below this, the stage and the slot decide. */
+var FIGHT_FIGURE_MAX = 260;
+
 function drawFoes() {
   var c = fit(document.getElementById('foes')), g = c.g;
   g.clearRect(0, 0, c.w, c.h);
   if (!cst) return;
   var staged = STAGE.live && !!STAGE.fxm, now = stageClock();
-  if (staged) { STAGE.ctx = g; STAGE.cell = Math.max(24, Math.min(c.h * 0.42, 110)); STAGE.mat = { x: 0, y: 0, w: c.w, h: c.h }; }
+  // v4.9: the motion cell grows with the stage, so a lunge still reaches on a big screen
+  if (staged) { STAGE.ctx = g; STAGE.cell = Math.max(24, Math.min(c.h * 0.42, 240)); STAGE.mat = { x: 0, y: 0, w: c.w, h: c.h }; }
 
   /* Record where a figure stands, then draw it wherever motion has it this
      frame: lunging, shaking, toppling. Returns what motion said, or null. */
@@ -10158,8 +10245,10 @@ function drawFoes() {
   function band(list, x0, x1, ground, scale, opts) {
     if (!list.length) return;
     var span = x1 - x0, step = span / list.length;
-    // never let a figure grow past its slot or the panel
-    var hgt = Math.min(c.h * 0.46, step * 1.35, 128) * scale;
+    // never let a figure grow past its slot or the panel. v4.9: no longer
+    // stopped at 128px; the stage now has a size of its own on every screen
+    var hgt = Math.min(c.h * 0.50, step * 1.7, FIGHT_FIGURE_MAX) * scale;
+    sizeUnder(hgt);
     list.forEach(function (m, i) {
       var x = x0 + step * (i + 0.5);
       if (opts.foe) {
@@ -10219,35 +10308,49 @@ function drawFoes() {
         });
         if (pHit && !staged) strikeMark(x, ground, hgt, step);
         if (m.bp > 0) bar(x, ground, step, m.bp / maxBP(m));
-        label(x, ground, m.name.slice(0, 8) + (isAlly ? '  \u25c0 TARGET' : ''), isNow || isAlly);
+        // v4.9: the name is clipped to its slot, and TARGET only where it fits
+        // (the reticle says it anyway): "Pete  TARGET" ran into the next name
+        var nm = clipTo(m.name.slice(0, 10), step);
+        label(x, ground, nm + (isAlly && fits(nm + '  \u25c0 TARGET', step) ? '  \u25c0 TARGET' : ''), isNow || isAlly);
         // what holds them, on a line of its own so neighbours' names do not run together
         var held9 = stone ? 'stone' : inside ? 'swallowed' : hasStatus(m, 'charmed') ? 'charmed' : hid ? 'hidden' : '';
         if (held9) {
           g.fillStyle = hasStatus(m, 'charmed') || inside ? PAL.red : PAL['text-dim'];
           g.font = '9px ui-monospace, Menlo, monospace'; g.textAlign = 'center';
-          g.fillText(held9.toUpperCase(), x, ground + 30); g.textAlign = 'left';
+          g.fillText(held9.toUpperCase(), x, ground + 10 + 2 * LBL + under); g.textAlign = 'left';
         }
         if (isNow) marker(x, ground, hgt);
       }
     });
   }
 
+  // v4.9: under a big figure the base reaches further down, so the bar and the
+  // name drop with it (they ran through the spotlight's ring), and the bar widens
+  var under = 0, barMax = 46;
+  function sizeUnder(hgt) { under = Math.max(0, hgt * 0.11 - 5); barMax = Math.max(46, hgt * 0.36); }
   function bar(x, ground, step, frac) {
-    var bw = Math.min(step * 0.55, 46);
-    g.fillStyle = '#241a10'; g.fillRect(x - bw / 2, ground + 5, bw, 3);
+    var bw = Math.min(step * 0.55, barMax), bh = barMax > 60 ? 4 : 3, by0 = ground + 5 + under;
+    g.fillStyle = '#241a10'; g.fillRect(x - bw / 2, by0, bw, bh);
     g.fillStyle = frac <= 0.3 ? PAL.red : PAL.gold;
-    g.fillRect(x - bw / 2, ground + 5, bw * frac, 3);
+    g.fillRect(x - bw / 2, by0, bw * frac, bh);
   }
 
+  // v4.9: a bigger stage gets bigger words
+  var LBL = c.h >= 420 ? 12 : 10;
   function fits(text, room) {
-    g.font = 'bold 10px ui-monospace, Menlo, monospace';
+    g.font = 'bold ' + LBL + 'px ui-monospace, Menlo, monospace';
     return g.measureText(text).width <= room - 4;
+  }
+  function clipTo(text, room) {
+    if (fits(text, room)) return text;
+    while (text.length > 1 && !fits(text + '\u2026', room)) text = text.slice(0, -1);
+    return text + '\u2026';
   }
   function label(x, ground, text, hot) {
     g.fillStyle = hot ? PAL.gold : PAL['text-dim'];
-    g.font = (hot ? 'bold ' : '') + '10px ui-monospace, Menlo, monospace';
+    g.font = (hot ? 'bold ' : '') + LBL + 'px ui-monospace, Menlo, monospace';
     g.textAlign = 'center';
-    g.fillText(text, x, ground + 19);
+    g.fillText(text, x, ground + 9 + LBL + under);
     g.textAlign = 'left';
   }
 
@@ -10317,23 +10420,32 @@ function drawFoes() {
   var pFront = party.filter(isFront).sort(byPos);
   var pBack  = party.filter(function (x) { return !isFront(x); }).sort(byPos);
 
-  // outer edge -> centre, both sides
-  band(foeBackList,  c.w * 0.02, c.w * 0.24, groundBack,  0.80, { foe: true });
-  band(foeFrontList, c.w * 0.24, c.w * 0.47, groundFront, 1.00, { foe: true });
+  // outer edge -> centre, both sides. v4.9: each side's half of the line is
+  // shared out by how many stand in each rank (a back-rank figure is drawn at
+  // 0.8, so needs a little less), so a lone rank has the whole half to itself
+  var share = function (nBack, nFront) {
+    var wb = nBack * 0.8, wf = nFront;
+    return wb + wf > 0 ? wb / (wb + wf) : 0.5;
+  };
+  var foeCut = 0.02 + 0.45 * share(foeBackList.length, foeFrontList.length);
+  band(foeBackList,  c.w * 0.02, c.w * foeCut, groundBack,  0.80, { foe: true });
+  band(foeFrontList, c.w * foeCut, c.w * 0.47, groundFront, 1.00, { foe: true });
   // someone freed from a cell stands at the near end of our front rank (v4.8)
   var al = cst.ally;
   var frontX0 = al ? 0.585 : 0.53;
-  band(pFront,       c.w * frontX0, c.w * 0.76, groundFront, 1.00, {});
-  band(pBack,        c.w * 0.76, c.w * 0.98, groundBack,  0.80, {});
+  var ourCut = 0.98 - (0.98 - frontX0) * share(pBack.length, pFront.length);
+  band(pFront,       c.w * frontX0, c.w * ourCut, groundFront, 1.00, {});
+  band(pBack,        c.w * ourCut, c.w * 0.98, groundBack,  0.80, {});
   if (al) {
     // as tall as the front rank beside them, in the gap by the line
-    var ax = c.w * 0.542, ah = Math.min(c.h * 0.46, c.w * (0.76 - frontX0) / Math.max(1, pFront.length) * 1.35, 128) * 0.95;
+    var ax = c.w * 0.542, ah = Math.min(c.h * 0.50, c.w * (ourCut - frontX0) / Math.max(1, pFront.length) * 1.7, FIGHT_FIGURE_MAX) * 0.95;
     moved('ally', ax, groundFront, ah, function (fx, fy, e) {
       g.globalAlpha = e ? Math.max(0, Math.min(1, e.alpha)) : 1;
       drawFigure(g, al.mini || 'monk', fx, fy, ah * 1.05, { lit: 1, alpha: 1, kind: 'hero', view: 'front', want: 'left',
                                                            flash: e ? e.flash > 0.35 : false });
       g.globalAlpha = 1;
     });
+    sizeUnder(ah);
     label(ax, groundFront, al.name.slice(0, 8), false);
   }
 
@@ -10341,10 +10453,11 @@ function drawFoes() {
   g.font = '9px ui-monospace, Menlo, monospace';
   g.textAlign = 'center';
   g.fillStyle = hexMix(PAL['text-dim'], PAL.pitch, 0.45);
-  if (foeBackList.length)  g.fillText('THEIR BACK',  c.w * 0.13, c.h - 6);
-  if (foeFrontList.length) g.fillText('THEIR FRONT', c.w * 0.355, c.h - 6);
-  if (pFront.length)       g.fillText('YOUR FRONT',  c.w * 0.645, c.h - 6);
-  if (pBack.length)        g.fillText('YOUR BACK',   c.w * 0.87, c.h - 6);
+  // under the middle of each rank, wherever the shares put it (v4.9)
+  if (foeBackList.length)  g.fillText('THEIR BACK',  c.w * (0.02 + foeCut) / 2, c.h - 6);
+  if (foeFrontList.length) g.fillText('THEIR FRONT', c.w * (foeCut + 0.47) / 2, c.h - 6);
+  if (pFront.length)       g.fillText('YOUR FRONT',  c.w * (frontX0 + ourCut) / 2, c.h - 6);
+  if (pBack.length)        g.fillText('YOUR BACK',   c.w * (ourCut + 0.98) / 2, c.h - 6);
   g.textAlign = 'left';
 
   // what is flying, and the numbers, over the figures
@@ -10448,7 +10561,9 @@ function allySelectable() {
 }
 
 function renderRosterList() {
-  var host = document.getElementById('roster');
+  // v4.9: its own id. Sharing 'roster' with the party screen meant this list
+  // never showed, and it wiped that screen, so a fresh party after a fight crashed.
+  var host = document.getElementById('cRoster');
   host.innerHTML = '';
 
   var hdr = document.createElement('div');
@@ -10660,6 +10775,27 @@ function renderCombat() {
   drawFoes(); renderRosterList(); renderLog(); renderActions(); renderParty(); renderTargetLine();
 }
 
+/* v4.9: when the enemy has the initiative (at the start of a fight, or when a
+   new round's order puts one of them first) their turns run now and play out
+   on the stage. The screen only ever moved on after a party action, so such a
+   fight sat on "..." for good; the simulator and the tests always ran them,
+   which is why the gate never caught it. */
+function foesGoFirst() {
+  if (!cst || cst.outcome || activeActor(cst) !== null) return false;
+  var stA = STAGE.live ? stageSnapshot(party, cst, stageMat) : null;
+  var snap = banterSnapshot(party, cst);
+  var guard = 0;
+  while (cst && !cst.outcome && activeActor(cst) === null && guard++ < 6) advanceCombat(party, cst, actionRng);
+  combatBanter(party, cst, snap, null, actionRng);
+  if (stA) stagePlay(null, null, selFoe, null, stA, stA, stageSnapshot(party, cst, stageMat));
+  return true;
+}
+/* Run the foes if one is up and nothing is still playing out; redraw if they ran. */
+function settleFoes() {
+  if (STAGE.playing) return;                 // the turn still playing will call back when done
+  if (foesGoFirst()) renderCombat();
+}
+
 function doAction(action) {
   if (STAGE.playing) return;                 // a turn is still playing out
   var actor = activeActor(cst);
@@ -10679,6 +10815,7 @@ function doAction(action) {
   combatBanter(party, cst, snap, null, actionRng);
   if (stA) stagePlay(actor, action, idx, held, stA, stB, stageSnapshot(party, cst, stageMat));
   renderCombat();
+  settleFoes();                              // a new round may open with the enemy (v4.9)
 }
 
 function startCombat(monsterId, group, opts) {
@@ -10697,6 +10834,7 @@ function startCombat(monsterId, group, opts) {
   stageReset();
   document.getElementById('combat').classList.add('on');
   renderCombat();
+  settleFoes();                              // they may have the initiative (v4.9)
 }
 
 function endCombat() {
@@ -15114,6 +15252,13 @@ document.getElementById('quickParty').addEventListener('click', suggestParty);
 document.getElementById('begin').addEventListener('click', beginDelve);
 
 addEventListener('resize', function () { redraw(); if (cst) renderCombat(); });
+// v4.9: on a phone the fight's log and its list of who is who share a place
+document.getElementById('cListBtn').addEventListener('click', function () {
+  var on = document.getElementById('combat').classList.toggle('showList');
+  this.setAttribute('aria-pressed', on ? 'true' : 'false');
+  this.textContent = on ? 'Log' : 'List';
+  if (on) renderRosterList();
+});
 // v4.9: turning a phone or resizing across the breakpoint swaps the layout;
 // the map starts afresh for its new panel rather than keeping the old zoom
 (function () {
