@@ -1,7 +1,7 @@
 /* Mitz & Simz: Dungeon Delve — offline cache.
    Cache-first: the game is a single file with no network dependencies, so once
    it is cached it runs with the radio off. Bump CACHE on every release. */
-const CACHE = 'msdd-v4.9.5';
+const CACHE = 'msdd-v4.9.6';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,10 @@ const ASSETS = [
   './motion.js',               // the shared motion module; without it fights are still
   './sound.js',                // the shared sound module; without it fights are silent
   './msdd.webmanifest',
-  './icon.svg'
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png'
 ];
 
 self.addEventListener('install', e => {

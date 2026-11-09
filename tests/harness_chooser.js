@@ -186,5 +186,34 @@ const miniCore = (src.match(/\/\* ==== MINI CORE START ==== \*\/[\s\S]*?\/\* ===
 // v4.9: with the renders out, the asset file is the textures alone (about 128 kb)
 ok('and the textures stay small', kb(assets) > 60 && kb(assets) < 200, kb(assets) + ' kb');
 
+console.log('\n[A9] the game has its own icon, in the Encounter Tracker\'s family');
+{
+  const head = src.slice(0, src.indexOf('<style>'));
+  const svgLink = head.match(/<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml,([^"]+)">/);
+  const svg = svgLink ? decodeURIComponent(svgLink[1]) : '';
+  ok('the tab icon is drawn inside the page, as the tracker\'s is', !!svgLink && /^<svg [^>]*viewBox='0 0 32 32'/.test(svg));
+  ok('a gold archway on dark, the tracker\'s colours', /fill='#1E1B16'/.test(svg) && /fill='#C9A227'/.test(svg) && /stroke='#8a6818'/.test(svg) && / A10\.5 10\.5 0 0 1 /.test(svg));
+  ok('with a paw: a pad and four toes', (svg.match(/<ellipse /g) || []).length === 1 && (svg.match(/<circle /g) || []).length === 4);
+  const pngSize = uri => { const b = Buffer.from(uri.split(',')[1], 'base64');
+    return b.slice(1, 4).toString() === 'PNG' ? [b.readUInt32BE(16), b.readUInt32BE(20)] : null; };
+  const p32 = head.match(/<link rel="icon" type="image\/png" sizes="32x32" href="(data:image\/png;base64,[^"]+)">/);
+  const touch = head.match(/<link rel="apple-touch-icon" href="(data:image\/png;base64,[^"]+)">/);
+  ok('a 32-pixel picture for browsers without SVG icons', !!p32 && pngSize(p32[1]).join() === '32,32');
+  ok('and a 180-pixel one for an iPhone or iPad home screen', !!touch && pngSize(touch[1]).join() === '180,180');
+  ok('each icon once', (head.match(/rel="icon"/g) || []).length === 2 && (head.match(/rel="apple-touch-icon"/g) || []).length === 1);
+  const man = JSON.parse(fs.readFileSync('./msdd.webmanifest', 'utf8'));
+  const ic = man.icons || [];
+  ok('the app icons: the archway as SVG, 192 and 512, and a maskable one for Android', ic.length === 4 &&
+     ic.some(i => i.src === 'icon.svg') && ic.some(i => i.src === 'icon-192.png' && i.sizes === '192x192') &&
+     ic.some(i => i.src === 'icon-512.png' && i.purpose === 'any') && ic.some(i => i.src === 'icon-maskable-512.png' && i.purpose === 'maskable'));
+  const beside = ['icon.svg', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
+  ok('they are all beside the game', beside.every(f => fs.existsSync('./' + f)));
+  ok('and its icon.svg is the same archway', fs.existsSync('./icon.svg') && fs.readFileSync('./icon.svg', 'utf8').trim() === svg.trim());
+  const sizeOf = f => { const b = fs.readFileSync('./' + f); return [b.readUInt32BE(16), b.readUInt32BE(20)].join(); };
+  ok('at the sizes they say', sizeOf('icon-192.png') === '192,192' && sizeOf('icon-512.png') === '512,512' && sizeOf('icon-maskable-512.png') === '512,512');
+  const sw = fs.existsSync('./sw.js') ? fs.readFileSync('./sw.js', 'utf8') : '';
+  ok('and kept for offline play', beside.every(f => sw.indexOf("'./" + f + "'") >= 0));
+}
+
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — '+pass+' passed, '+fail+' failed\n');
 process.exit(fail?1:0);
