@@ -360,6 +360,101 @@
   #evt .choice:disabled{opacity:.35}
   #evt .why{font:10px/1.4 ui-monospace,Menlo,monospace;color:var(--text-dim);display:block;margin-top:3px}
   #evtOut{font-size:12px;color:var(--gold);line-height:1.6;margin:10px 0;min-height:20px}
+
+  /* ---------- v4.9 layout: the view comes first at every size ----------
+     The log, the cards and the buttons used to keep their full size and the
+     view got what was left: 50px on a phone once the log filled. Now the view
+     takes the space, kept to a sensible shape, and spare height goes to the log. */
+  #app{padding:max(var(--pad),env(safe-area-inset-top)) max(var(--pad),env(safe-area-inset-right))
+       max(var(--pad),env(safe-area-inset-bottom)) max(var(--pad),env(safe-area-inset-left))}
+  #main,#side{display:contents}
+  header{min-width:0}
+  h1{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #hud,#invBtn{flex:0 0 auto}
+  .tag{max-width:calc(100% - 16px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #pad .use{grid-column:1/-1;height:44px;font-size:12px;border-color:var(--gold);color:var(--gold)}
+  #pad .wide{grid-column:1/-1;height:40px;font-size:12px}
+  #look{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+  #lookText{flex:0 0 auto}
+
+  /* upright (phones, tablets held upright, tall windows) */
+  #stage{flex:1000 1 0;min-height:min(34vh,260px);max-height:calc((min(100vw,900px) - 24px) / 1.25);position:relative}
+  #look{flex:1 1 auto;min-height:64px}
+  #mlog{flex:1 1 clamp(40px,12vh,136px);min-height:38px;max-height:none}
+  #viewWrap{flex:1 1 auto}
+  /* the automap is an inset in the corner of the view; a tap opens it full screen */
+  #mapWrap:not(.big){position:absolute;top:6px;right:6px;width:min(40%,300px);height:min(46%,240px);
+    z-index:3;background:rgba(14,10,8,.86);flex:none}
+  #mapWrap:not(.big) #mapCtl,#mapWrap:not(.big) .tag,#mapWrap:not(.big) #mapInfo{display:none}
+  #mapWrap:not(.big) #map{cursor:zoom-in}
+  /* two rows of buttons: turn, forward, turn / rest, back, search; Use down the side */
+  #pad{grid-template-columns:repeat(4,1fr);grid-template-rows:48px 48px;max-width:460px;gap:6px}
+  #pad .spacer{display:none}
+  #pad button,#pad .use,#pad .wide{height:auto}
+  #pad [data-act=left]{grid-area:1/1}
+  #pad [data-act=fwd]{grid-area:1/2}
+  #pad [data-act=right]{grid-area:1/3}
+  #pad [data-act=rest]{grid-area:2/1;font-size:11px;padding:0 2px}
+  #pad [data-act=back]{grid-area:2/2}
+  #pad [data-act=search]{grid-area:2/3;font-size:11px;padding:0 2px}
+  #pad [data-act=use]{grid-area:1/4/3/5;white-space:normal;line-height:1.25;padding:0 4px}
+  @media (hover:none),(pointer:coarse){footer{display:none}}
+  @media (max-width:420px){h1 small{display:none}}
+  /* on a phone the passing message is smaller, so it hides less of the view */
+  @media (max-width:600px){#msg{font-size:12px;padding:4px 9px;bottom:6px;max-width:calc(100% - 16px)}}
+
+  /* landscape: the party and the controls in a column on the right */
+  @media (min-width:640px) and (min-aspect-ratio:5/4){
+    #app{max-width:2000px;display:grid;column-gap:12px;row-gap:8px;
+      grid-template-columns:minmax(0,1fr) clamp(200px,22vw,300px);
+      grid-template-rows:auto auto minmax(0,1fr);
+      grid-template-areas:"head head" "main threat" "main side"}
+    header{grid-area:head}
+    #threat{grid-area:threat}
+    #main{grid-area:main;display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0}
+    #side{grid-area:side;display:flex;flex-direction:column;gap:10px;min-height:0;overflow-y:auto}
+    #stage{flex:1000 1 0;min-height:150px;
+      max-height:calc((min(100vw,2000px) - 36px - clamp(200px,22vw,300px)) * 0.5)}
+    #look{flex:1 1 auto;max-height:36vh}
+    #viewWrap{flex:0 0 64%}
+    #mapWrap:not(.big){flex:1 1 0;min-width:0;position:relative;top:auto;right:auto;width:auto;height:auto;z-index:auto;background:var(--ink)}
+    #mapWrap:not(.big) #mapCtl{display:flex}
+    #mapWrap:not(.big) .tag,#mapWrap:not(.big) #mapInfo{display:block}
+    #mapWrap:not(.big) #map{cursor:grab}
+    #party{grid-template-columns:repeat(2,1fr)}
+    /* the familiar pad: forward on top, turns either side of back, then Use, Search, Rest */
+    #pad{grid-template-columns:repeat(3,1fr);grid-template-rows:none;max-width:none;gap:8px;margin:auto 0 0}
+    #pad button{height:52px}
+    #pad [data-act=left]{grid-area:2/1}
+    #pad [data-act=fwd]{grid-area:1/2}
+    #pad [data-act=right]{grid-area:2/3}
+    #pad [data-act=back]{grid-area:2/2}
+    #pad [data-act=use]{grid-area:3/1/4/4;height:46px}
+    #pad [data-act=search]{grid-area:4/1/5/4;height:40px;font-size:12px}
+    #pad [data-act=rest]{grid-area:5/1/6/4;height:40px;font-size:12px}
+    footer{font-size:10px;line-height:1.6}
+  }
+  /* sideways on a phone: the same, smaller */
+  @media (min-width:640px) and (min-aspect-ratio:5/4) and (max-height:560px){
+    #app{row-gap:6px}
+    #main,#side{gap:6px}
+    #stage{min-height:120px}
+    #mapWrap:not(.big) .tag{display:none}
+    #look{min-height:54px;padding:5px 8px}
+    #mlog{flex-basis:34px;min-height:30px}
+    #party{gap:4px}
+    .pc{padding:3px 5px 4px}
+    .pc .num{font-size:9px;line-height:1.25}
+    .pc .bar{margin-top:2px}
+    #pad{gap:5px}
+    #pad button{height:38px}
+    #pad [data-act=left]{grid-area:1/1}
+    #pad [data-act=right]{grid-area:1/3}
+    #pad [data-act=back]{grid-area:2/2}
+    #pad [data-act=search]{grid-area:2/1;height:38px;font-size:11px;padding:0 2px}
+    #pad [data-act=use]{grid-area:2/3;height:38px;white-space:normal;line-height:1.15;padding:0 2px;font-size:11px}
+    #pad [data-act=rest]{grid-area:3/1/4/4;height:30px;font-size:11px}
+  }
   @media (prefers-reduced-motion:reduce){button{transition:none}}
 </style>
 </head>
@@ -525,6 +620,7 @@
   </header>
   <div id="threat"></div>
 
+  <div id="main">
   <div id="stage">
     <div class="panel" id="viewWrap">
       <canvas id="view"></canvas>
@@ -546,7 +642,9 @@
   </div>
 
   <div id="look"><div id="lookHead">&nbsp;</div><div id="lookText"></div><div id="mlog"></div></div>
+  </div>
 
+  <div id="side">
   <div id="party"></div>
 
   <div id="pad">
@@ -556,12 +654,13 @@
     <button data-act="left" aria-label="Turn left">&#8630;</button>
     <button data-act="back" aria-label="Back">&#9660;</button>
     <button data-act="right" aria-label="Turn right">&#8631;</button>
-    <button data-act="use" aria-label="Use" style="grid-column:1/-1;height:44px;font-size:12px;border-color:var(--gold);color:var(--gold)">Use</button>
-    <button data-act="search" class="wide" aria-label="Search" style="grid-column:1/-1;height:40px;font-size:12px">Search</button>
-    <button data-act="rest" id="btnRest" class="wide" aria-label="Rest" style="grid-column:1/-1;height:40px;font-size:12px">Rest</button>
+    <button data-act="use" class="use" aria-label="Use">Use</button>
+    <button data-act="search" class="wide" aria-label="Search">Search</button>
+    <button data-act="rest" id="btnRest" class="wide" aria-label="Rest">Rest</button>
   </div>
 
   <footer>Arrows / WASD &middot; Q E turn &middot; Space use &middot; F search &middot; M sound &middot; P snapshot</footer>
+  </div>
 </div>
 
 <script src="msdd_assets.js"></script>
@@ -4948,6 +5047,7 @@ function describeFoes(foes) {
   var parts = order.map(function (base) {
     var n = tally[base];
     if (n > 1) return n + ' ' + base + 's';
+    if (/^The /.test(base)) return base;          // "The Shade of Ashkeld", never "a The Shade" (v4.9)
     return (/^[AEIOU]/i.test(base) ? 'an ' : 'a ') + base;
   });
   if (parts.length === 1) return parts[0];
@@ -10608,7 +10708,9 @@ function endCombat() {
   if (wentHome) pendingRecall = true;
   // carry the result into the dungeon log, so the record stays continuous
   var kills = cst.foes.filter(function (f) { return f.bp <= 0 && !f.fled; }).length;
-  if (out === 'won') say(describeFoes(cst.foes) + ' defeated \u2014 ' + kills +
+  var beaten = describeFoes(cst.foes);
+  beaten = beaten.charAt(0).toUpperCase() + beaten.slice(1);   // a sentence starts with a capital (v4.9)
+  if (out === 'won') say(beaten + ' defeated \u2014 ' + kills +
                          ' down, ' + cst.xpAwarded + ' experience.');
   else if (out === 'fled') say(wentHome ? 'The world reassembles. You are in town.'
                                         : 'You broke off the fight.');
@@ -13622,12 +13724,15 @@ function drawFeatureBase(g, feat, cell, near, far, px, ty, by) {
     var lead = feat.ref || (g0 && (typeof g0 === 'string' ? g0 : g0.ref));
     var mref = MONSTERS[lead];
     if (!spent) {
-      // in the corridor a monster stands at the far end of the cell, so it is
-      // lit by distance like everything else on that plane
-      if (!drawSprite(g, lead, midX, bot - h * 0.04, h * 0.62, lit, 1, false)) {
+      // v4.9: a monster stands in the middle of its square, not against the far
+      // edge, and stands taller: at the far edge it was a fifth of the view's
+      // height a square away, too small to make out. Lit by its own distance.
+      var mm = (near + far) / 2, mX = (px(cell.o - 0.5, mm) + px(cell.o + 0.5, mm)) / 2;
+      var mBot = by(mm), mH = mBot - ty(mm), mLit = 1 - fog(mm);
+      if (!drawSprite(g, lead, mX, mBot - mH * 0.03, mH * MINI_IN_VIEW, mLit, 1, false)) {
         // seen at eye level down the corridor, so the base is flatter than on the table
-        drawMini(g, midX, bot - h * 0.04, h * 0.62,
-                 (mref && mref.level) || 1, (mref && mref.art) || feat.art, lit, false, lead, null, 0, 'front');
+        drawMini(g, mX, mBot - mH * 0.03, mH * MINI_IN_VIEW,
+                 (mref && mref.level) || 1, (mref && mref.art) || feat.art, mLit, false, lead, null, 0, 'front');
       }
     }
   }
@@ -13656,6 +13761,10 @@ function drawFeatureBase(g, feat, cell, near, far, px, ty, by) {
    Traps only once found; a chest that is trapped or breathing shows it once
    someone has noticed; and the plates, portcullises and finds. Returns true
    when it has drawn the whole feature. */
+/* v4.9: how tall a mini stands in the corridor, as a share of the passage
+   height where it stands. 0.62 at the far edge of the square read as tiny. */
+var MINI_IN_VIEW = 0.74;
+
 function drawFeature(g, feat, cell, near, far, px, ty, by) {
   var key = cell.x + ',' + cell.y;
   if (feat.type === 'trap') {
@@ -13726,6 +13835,11 @@ function drawFeature48(g, feat, cell, near, far, px, ty, by) {
   };
   var figure = function (id, scale, ground) {
     drawFigure(g, id, midX, ground || bot - h * 0.05, h * (scale || 0.6), { lit: lit, alpha: 1, kind: 'neutral', view: 'front', want: 'left' });
+  };
+  // v4.9: someone you can talk to stands mid-square, like a monster does
+  var standing = function (id) {
+    var mm = (near + far) / 2, mX = (px(cell.o - 0.5, mm) + px(cell.o + 0.5, mm)) / 2, mBot = by(mm), mH = mBot - ty(mm);
+    drawFigure(g, id, mX, mBot - mH * 0.03, mH * MINI_IN_VIEW, { lit: 1 - fog(mm), alpha: 1, kind: 'neutral', view: 'front', want: 'left' });
   };
   g.save();
   switch (feat.type) {
@@ -13806,14 +13920,14 @@ function drawFeature48(g, feat, cell, near, far, px, ty, by) {
     }
     case 'merchant': {
       glow(midX + w * 0.14, bot - h * 0.40, h * 0.28, 0.5);
-      figure('tinker', 0.6);
+      standing('tinker');
       break;
     }
     case 'prisoner': {
       var chain = hexMix(PAL['stone-far'], PAL.pitch, 0.3 + fog(far) * 0.4);
       g.strokeStyle = chain; g.lineWidth = Math.max(0.8, 1.6 * s);
       [-1, 1].forEach(function (sg) { g.beginPath(); g.moveTo(midX + sg * w * 0.24, top + h * 0.34); g.quadraticCurveTo(midX + sg * w * 0.18, bot - h * 0.30, midX + sg * w * 0.08, bot - h * 0.38); g.stroke(); });
-      if (!spent) figure('monk', 0.55);
+      if (!spent) figure('monk', 0.66);
       break;
     }
     case 'illusion':
@@ -14127,11 +14241,24 @@ function mapTerrainCell(g, kind, X, Y, s, acrossEW) {
   g.restore();
 }
 
+/* v4.9: held upright, the automap is an inset in the corner of the view.
+   Fitting a whole floor into it would make every square a speck, so there it
+   follows the party at a readable size; a tap still opens the full map. */
+var MAP_INSET_CELL = 9;
+function mapIsInset() {
+  var w = document.getElementById('mapWrap');
+  return !!w && !w.classList.contains('big') && getComputedStyle(w).position === 'absolute';
+}
+
 function drawMap() {
   var c = fit(document.getElementById('map')), g = c.g;
   g.clearRect(0, 0, c.w, c.h);
 
-  if (mapView.scale == null) mapFit(c);
+  if (mapView.scale == null) {
+    mapFit(c);
+    // a small floor still fits whole; a big one is followed at a readable size
+    if (mapIsInset() && mapView.scale < MAP_INSET_CELL * 0.8) mapView.scale = MAP_INSET_CELL;
+  }
   // when following, keep the party in view without the player having to pan
   if (mapView.follow) {
     var fitS = mapFitScale(c);
@@ -14987,6 +15114,15 @@ document.getElementById('quickParty').addEventListener('click', suggestParty);
 document.getElementById('begin').addEventListener('click', beginDelve);
 
 addEventListener('resize', function () { redraw(); if (cst) renderCombat(); });
+// v4.9: turning a phone or resizing across the breakpoint swaps the layout;
+// the map starts afresh for its new panel rather than keeping the old zoom
+(function () {
+  if (!window.matchMedia) return;
+  var mq = matchMedia('(min-width:640px) and (min-aspect-ratio:5/4)');
+  var swap = function () { mapView.scale = null; mapView.follow = true; redraw(); };
+  if (mq.addEventListener) mq.addEventListener('change', swap);
+  else if (mq.addListener) mq.addListener(swap);
+})();
 addEventListener('pagehide', autosave);
 addEventListener('visibilitychange', function(){ if(document.hidden) autosave(); });
 readPalette();

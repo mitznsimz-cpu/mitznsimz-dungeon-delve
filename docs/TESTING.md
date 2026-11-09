@@ -166,6 +166,23 @@ Mitz lifts it.
 Quickest way to see it: start the "Level 5, with a rogue" test party, face the
 warped door in the tower's hall and press Use.
 
+### The screen fits the device (v4.9)
+
+The dungeon view comes first at every size. On a wide screen the party, the
+threat and the buttons sit in a column on the right, and the view and the
+automap take the rest. Held upright on a phone, the buttons fold into two rows
+(Use runs down the right-hand side) and the automap is a small inset in the
+corner of the view: tap it for the full map, and tap again to shrink it. Turned
+sideways, a phone gets the wide layout in miniature. Monsters, and the merchant,
+now stand in the middle of their square and a little taller, so they are easy to
+make out a square or two ahead.
+
+To check the layout at thirteen screen sizes, from a small phone to a big
+monitor, the repo has `tools/layout_shots.js`: run
+`node tools/layout_shots.js index.html <folder>` (it needs Playwright,
+`npm install playwright`). It saves a screenshot of each size and prints the size
+of the view and the map, and whether anything spills off the screen.
+
 ### Controls
 
 - **Arrows** or **WASD** — move
@@ -175,7 +192,7 @@ warped door in the tower's hall and press Use.
 - **Packs** — the party's gear, and spells to cast between fights
 - **Use** — open, take, read, talk; clear rubble and webs, disarm a found trap, heave a portcullis, pick or force a lock, or throw a rope across a gap in front of you
 - **Search** — look for secret doors, and for traps here and on the four squares around you
-- **Tap the automap** — enlarge, tap again to shrink
+- **Tap the automap** — enlarge, tap again to shrink (on a phone held upright it sits in the corner of the view)
 - **Tap the fight** while a turn plays out — skip to the end of it
 
 ### Saves

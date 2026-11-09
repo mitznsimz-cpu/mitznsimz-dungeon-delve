@@ -571,5 +571,69 @@ ok('map skips unseen cells', /if \(!ex\[/.test(map));
 ok('no fog overlay — unexplored is absent', !/fog|rgba\(0,0,0/.test(map));
 ok('facing is shown', /pos\.f\]/.test(map));
 
+console.log('\n[L26] the view comes first at every screen size (v4.9)');
+// The log, the cards and the buttons kept their full size and the view got
+// what was left: about 50px on a phone once the log filled, 47px on a
+// 1280x720 laptop. The browser check (dev/layout_shots.js) measures it at
+// eleven sizes; these keep the rules that make it so from being undone.
+ok('the view and map are wrapped as the main area, the cards and pad as the side',
+   /<div id="main">\s*<div id="stage">/.test(src) && /<div id="side">\s*<div id="party"><\/div>/.test(src));
+ok('both wrappers vanish in the upright layout, so the page order stays as it was',
+   /#main,#side\{display:contents\}/.test(src));
+ok('the view grows ahead of everything else', /#stage\{flex:1000 1 0;/.test(src));
+ok('it always keeps a real height, even on a small phone',
+   /#stage\{flex:1000 1 0;min-height:min\(34vh,260px\)/.test(src));
+ok('and never goes too square: spare height goes to the log',
+   /max-height:calc\(\(min\(100vw,900px\) - 24px\) \/ 1\.25\)/.test(src) && /#look\{flex:1 1 auto;min-height:64px\}/.test(src));
+ok('the log keeps a few lines and can shrink to two', /#mlog\{flex:1 1 clamp\(40px,12vh,136px\);min-height:38px;max-height:none\}/.test(src));
+ok('held upright, the automap is an inset in the corner of the view',
+   /#mapWrap:not\(\.big\)\{position:absolute;top:6px;right:6px;/.test(src));
+ok('a tap on it still opens the full map', /a tap that did not drag expands the map/.test(src) &&
+   /classList\.toggle\('big'\)/.test(src));
+ok('the inset follows the party at a readable size on a big floor',
+   /if \(mapIsInset\(\) && mapView\.scale < MAP_INSET_CELL \* 0\.8\) mapView\.scale = MAP_INSET_CELL;/.test(src));
+ok('the upright pad is two rows, Use down the side',
+   /#pad\{grid-template-columns:repeat\(4,1fr\);grid-template-rows:48px 48px;/.test(src) &&
+   /#pad \[data-act=use\]\{grid-area:1\/4\/3\/5;/.test(src));
+ok('the pad buttons carry no inline layout, so each layout can arrange them',
+   !/data-act="(use|search|rest)"[^>]*style=/.test(src));
+ok('landscape screens put the party and controls in a column on the right',
+   /@media \(min-width:640px\) and \(min-aspect-ratio:5\/4\)\{\s*#app\{max-width:2000px;display:grid;/.test(src) &&
+   /grid-template-areas:"head head" "main threat" "main side"/.test(src));
+ok('there the party is two by two', /#party\{grid-template-columns:repeat\(2,1fr\)\}/.test(src));
+ok('and the pad is the familiar one: forward on top, Use, Search, Rest below',
+   /#pad\{grid-template-columns:repeat\(3,1fr\);grid-template-rows:none;/.test(src));
+ok('a phone held sideways gets the compact version', /and \(min-aspect-ratio:5\/4\) and \(max-height:560px\)\{/.test(src));
+ok('the map panel can never be stretched by its own canvas',
+   /#mapWrap:not\(\.big\)\{flex:1 1 0;min-width:0;position:relative;/.test(src),
+   'with flex:none the canvas width fed back into the panel width');
+ok('turning the phone starts the map afresh', /var swap = function \(\) \{ mapView\.scale = null; mapView\.follow = true; redraw\(\); \};/.test(src));
+ok('the keys hint is hidden where there is no keyboard', /@media \(hover:none\),\(pointer:coarse\)\{footer\{display:none\}\}/.test(src));
+ok('the notch and the home bar are kept clear', /env\(safe-area-inset-top\)/.test(src) && /env\(safe-area-inset-bottom\)\)/.test(src));
+ok('the title shortens rather than wrapping', /h1\{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\}/.test(src));
+
+console.log('\n[L27] minis in the corridor are big enough to make out (v4.9)');
+const featSrc = src.slice(src.indexOf('function drawFeatureBase'), src.indexOf('/* ---------- v4.8: drawing the new things'));
+ok('a monster stands mid-square, not at the far edge',
+   /var mm = \(near \+ far\) \/ 2/.test(featSrc) && /drawSprite\(g, lead, mX, mBot - mH \* 0\.03, mH \* MINI_IN_VIEW/.test(featSrc) &&
+   !/drawSprite\(g, lead, midX, bot - h \* 0\.04, h \* 0\.62/.test(featSrc));
+const miv = +(src.match(/var MINI_IN_VIEW = ([\d.]+);/) || [0, 0])[1];
+ok('and stands taller', miv >= 0.7 && miv <= 0.85, String(miv));
+// one square ahead: the share of the view's height the figure fills
+const shareNow = miv * (SCALE[1] + SCALE[2]) / 2, shareWas = 0.62 * SCALE[2];
+ok('one square ahead it fills nearly half as much again of the view, before the bigger view', shareNow / shareWas >= 1.4,
+   (100 * shareWas).toFixed(0) + '% -> ' + (100 * shareNow).toFixed(0) + '% of the view height');
+ok('the merchant steps forward too', /standing\('tinker'\)/.test(src));
+ok('the prisoner stays chained to the wall, but taller', /figure\('monk', 0\.66\)/.test(src));
+
+console.log('\n[L28] the fight result reads as a sentence (v4.9)');
+const dfSrc = src.slice(src.indexOf('function describeFoes'), src.indexOf('/* The verb has to agree'));
+const describeFoes = new Function(dfSrc + '; return describeFoes;')();
+const named = describeFoes([{ name: 'The Shade of Ashkeld' }, { name: 'Shade Wisp A' }, { name: 'Shade Wisp B' }]);
+ok('a named foe takes no article', named === 'The Shade of Ashkeld and 2 Shade Wisps', named);
+ok('an ordinary one still does', describeFoes([{ name: 'Ghoul' }]) === 'a Ghoul' && describeFoes([{ name: 'Imp' }]) === 'an Imp');
+ok('the line starts with a capital', /beaten = beaten\.charAt\(0\)\.toUpperCase\(\) \+ beaten\.slice\(1\);/.test(src) &&
+   /say\(beaten \+ ' defeated \\u2014 '/.test(src));
+
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);

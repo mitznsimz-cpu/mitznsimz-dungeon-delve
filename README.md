@@ -55,7 +55,7 @@ You need [Node](https://nodejs.org). From the top folder:
 sh tests/run_gate.sh
 ```
 
-It runs 28 runners with 2,215 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
+It runs 28 runners with 2,243 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
 
 ## Licence
 
