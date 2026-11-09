@@ -1,0 +1,38 @@
+/* Mitz & Simz: Dungeon Delve — offline cache.
+   Cache-first: the game is a single file with no network dependencies, so once
+   it is cached it runs with the radio off. Bump CACHE on every release. */
+const CACHE = 'msdd-v4.9.5';
+const ASSETS = [
+  './',
+  './index.html',
+  './msdd_assets.js',          // wall textures; without it the walls are drawn as masonry
+  './motion.js',               // the shared motion module; without it fights are still
+  './sound.js',                // the shared sound module; without it fights are silent
+  './msdd.webmanifest',
+  './icon.svg'
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET') return;
+  e.respondWith(
+    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+      if (res && res.status === 200 && res.type === 'basic') {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy));
+      }
+      return res;
+    }).catch(() => caches.match('./index.html')))
+  );
+});

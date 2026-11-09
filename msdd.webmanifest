@@ -1,0 +1,15 @@
+{
+  "name": "Mitz & Simz: Dungeon Delve",
+  "short_name": "Dungeon Delve",
+  "description": "A first-person party dungeon crawler in the spirit of the early 1990s.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0E0A08",
+  "theme_color": "#0E0A08",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
