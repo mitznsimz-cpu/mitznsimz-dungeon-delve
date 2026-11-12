@@ -84,11 +84,12 @@
   function plan(F, zone, hooks) {
     hooks = hooks || {};
     var G = {}; GEO_NAMES.forEach(function (n) { G[n] = new Geo(); });
-    var out = { geo: G, lamps: [], doors: [], minis: [], fixtures: [] };
+    var out = { geo: G, lamps: [], doors: [], minis: [], fixtures: [], lids: [], stairs: [] };
     var W = F.w, Hh = F.h, cells = F.cells, feats = F.features || {};
-    var cellAt = function (x, y) { return (x < 0 || y < 0 || x >= W || y >= Hh) ? 15 : cells[y * W + x]; };
+    var ROCK = 16;                                       // the game's cell bits: walls N E S W 1 2 4 8, rock 16
+    var cellAt = function (x, y) { return (x < 0 || y < 0 || x >= W || y >= Hh) ? 15 | ROCK : cells[y * W + x]; };
     var wall = function (x, y, d) { return (cellAt(x, y) & DIRBIT[d]) !== 0; };
-    var rock = function (x, y) { return cellAt(x, y) === 15; };
+    var rock = function (x, y) { return (cellAt(x, y) & ROCK) !== 0; };
     var terr = function (x, y) { return hooks.terrain ? hooks.terrain(x, y) : ((F.terrain || {})[x + ',' + y] || null); };
     var decor = zone.decor || [];
     var R = function (x, y, k) { return hash(x, y, k, 91); };
@@ -110,11 +111,14 @@
         if (t === 'bridge' && (!hooks.bridge || hooks.bridge(x, y))) {
           for (var pl = 0; pl < 6; pl++) G.wood.box(x, -0.03, y - 0.4 + pl * 0.16, 0.6, 0.04, 0.14, true, (R(x, y, pl) - 0.5) * 0.08);
         }
+      } else if (ft && ft.type === 'stairsDown') {
+        shaft(G, x, y, -1.3);                                                         // steps go down through a hole
       } else {
         var fg = TERR_GEO[t] ? G[TERR_GEO[t]] : G.floor;
         fg.quad([x0, 0, z1], [x1, 0, z1], [x1, 0, z0], [x0, 0, z0], [0, 1, 0]);
       }
-      G.ceil.quad([x0, H, z0], [x1, H, z0], [x1, H, z1], [x0, H, z1], [0, -1, 0]);
+      if (ft && ft.type === 'stairsUp') shaft(G, x, y, 1.3);                          // and up into one
+      else G.ceil.quad([x0, H, z0], [x1, H, z0], [x1, H, z1], [x0, H, z1], [0, -1, 0]);
 
       var walls = [];
       for (var d = 0; d < 4; d++) {
@@ -160,13 +164,31 @@
       if (t === 'web') { crossWeb(G, x, y); }
 
       // what stands in the square
-      if (t === 'pillars') { G.wall.box(x, H / 2, y, 0.3, H, 0.3, false); G.wall.box(x, 0.05, y, 0.4, 0.1, 0.4); G.wall.box(x, H - 0.05, y, 0.4, 0.1, 0.4, false); }
-      else if (t === 'rubble') rubble(G.prop, x, y, R, 0, 0, 14, 0.38);
+      if (t === 'pillars') {
+        // a pair you walk between, across the way you came through (as the 2D view draws them)
+        var nsP = !wall(x, y, 0) || !wall(x, y, 2) ? (wall(x, y, 1) || wall(x, y, 3) || (!wall(x, y, 0) && !wall(x, y, 2))) : false;
+        [-0.33, 0.33].forEach(function (o) {
+          var px = x + (nsP ? o : 0), pz = y + (nsP ? 0 : o);
+          G.wall.box(px, H / 2, pz, 0.18, H, 0.18, false); G.wall.box(px, 0.04, pz, 0.26, 0.08, 0.26); G.wall.box(px, H - 0.04, pz, 0.26, 0.08, 0.26, false);
+        });
+      }
+      else if (t === 'rubble') rubble(G.prop, x, y, R, 0, 0, 24, 0.85, true);   // fallen stone across the way
       else if (t === 'fog') mistCell(G.mist, x, y, R);
       if (ft) feature(G, out, F, key, ft, x, y, walls, hooks, zone, R);
       else if (!t && walls.length && !(F.entry && F.entry[0] === x && F.entry[1] === y)) clutter(G, x, y, walls, zone, R);
     }
     return out;
+  }
+
+  /* A square's floor or ceiling opened into a shaft: its four sides in stone,
+     and the dark at the far end. depth < 0 goes down, > 0 goes up past the ceiling. */
+  function shaft(G, x, y, depth) {
+    var x0 = x - 0.5, x1 = x + 0.5, z0 = y - 0.5, z1 = y + 0.5, a = depth < 0 ? depth : H, b = depth < 0 ? 0 : H + depth;
+    [[x0, z0, x1, z0, [0, 0, 1]], [x1, z0, x1, z1, [-1, 0, 0]], [x1, z1, x0, z1, [0, 0, -1]], [x0, z1, x0, z0, [1, 0, 0]]].forEach(function (e) {
+      G.pit.face([e[0], a, e[1]], [e[2], a, e[3]], [e[2], b, e[3]], [e[0], b, e[1]], e[4]);
+    });
+    var end = depth < 0 ? depth : H + depth;
+    G.recess.face([x0, end, z1], [x1, end, z1], [x1, end, z0], [x0, end, z0], [0, depth < 0 ? 1 : -1, 0]);
   }
 
   /* A wall with a hole in it: the pieces round the hole, and the niche behind. */
@@ -197,10 +219,13 @@
     G.web.quad([x - 0.5, 0.05, y], [x + 0.5, 0.05, y], [x + 0.5, 0.95, y], [x - 0.5, 0.95, y], [0, 0, 1], [0, 0, 1, 0, 1, 1, 0, 1]);
     G.web.quad([x, 0.05, y + 0.5], [x, 0.05, y - 0.5], [x, 0.95, y - 0.5], [x, 0.95, y + 0.5], [1, 0, 0], [1, 0, 0, 0, 0, 1, 1, 1]);
   }
-  function rubble(g, x, y, R, ox, oz, n, spread) {
+  function rubble(g, x, y, R, ox, oz, n, spread, big) {
     for (var r = 0; r < n; r++) {
-      var sz = 0.04 + R(x, y, 30 + r) * 0.1;
-      g.box(x + ox + (R(x, y, 50 + r) - 0.5) * spread, sz * 0.4, y + oz + (R(x, y, 70 + r) - 0.5) * spread, sz, sz * 0.8, sz * 1.1, true, R(x, y, 90 + r) * 6, (R(x, y, 110 + r) - 0.5) * 0.6);
+      var sz = (big ? 0.12 : 0.06) + R(x, y, 30 + r) * (big ? 0.22 : 0.12);
+      var dx = (R(x, y, 50 + r) - 0.5) * spread, dz = (R(x, y, 70 + r) - 0.5) * spread;
+      // a heap: higher in the middle, stones resting on stones
+      var lift = big ? Math.max(0, 1 - Math.hypot(dx, dz) / (spread * 0.55)) * 0.42 * R(x, y, 200 + r) : 0;
+      g.box(x + ox + dx, sz * 0.4 + lift, y + oz + dz, sz, sz * 0.8, sz * 1.1, true, R(x, y, 90 + r) * 6, (R(x, y, 110 + r) - 0.5) * 0.7);
     }
   }
   function mistCell(g, x, y, R) {                              // a few soft sheets of mist
@@ -219,7 +244,7 @@
     var along = [FWD[(d + 1) % 4][0], FWD[(d + 1) % 4][1]], o = (R(x, y, 4) - 0.5) * 0.5;
     wx += along[0] * o; wz += along[1] * o;
     var j = function (k) { return R(x, y, 130 + k); };
-    if (what === 'rubble') rubble(G.prop, x, y, R, wx - x, wz - y, 9, 0.3);
+    if (what === 'rubble') rubble(G.prop, x, y, R, wx - x, wz - y, 11, 0.36);
     else if (what === 'blocks') { G.prop.box(wx, 0.09, wz, 0.32, 0.18, 0.22, true, j(1) * 6); if (j(2) > 0.5) G.prop.box(wx + 0.1, 0.27, wz, 0.24, 0.16, 0.2, true, j(3) * 6, (j(4) - 0.5) * 0.4); }
     else if (what === 'bones') for (var r2 = 0; r2 < 10; r2++) G.bone.box(wx + (j(r2) - 0.5) * 0.35, 0.012 + r2 * 0.004, wz + (j(r2 + 10) - 0.5) * 0.35, 0.022, 0.022, 0.12 + j(r2 + 20) * 0.08, true, j(r2 + 30) * 6);
     else if (what === 'skulls') for (var r3 = 0; r3 < 5; r3++) skull(G.bone, wx + (j(r3) - 0.5) * 0.25, r3 < 3 ? 0 : 0.07, wz + (j(r3 + 5) - 0.5) * 0.25, j(r3 + 9) * 6);
@@ -288,9 +313,10 @@
     } else if (t === 'chest') {
       var ry = ns ? 0 : Math.PI / 2;
       G.wood.box(x, 0.1, y, 0.36, 0.2, 0.24, true, ry);
-      if (spent) G.wood.box(x + (ns ? 0 : -0.13), 0.29, y + (ns ? -0.13 : 0), 0.36, 0.05, 0.24, true, ry, -1.2);   // lid thrown back
-      else { G.wood.box(x, 0.225, y, 0.37, 0.05, 0.25, true, ry); G.iron.box(x + (ns ? 0 : 0.126), 0.18, y + (ns ? 0.126 : 0), ns ? 0.05 : 0.008, 0.06, ns ? 0.008 : 0.05); }
-      [-0.12, 0.12].forEach(function (o) { G.iron.box(x + (ns ? o : 0), 0.125, y + (ns ? 0 : o), ns ? 0.02 : 0.25, 0.25, ns ? 0.25 : 0.02); });
+      G.recess.box(x, 0.199, y, 0.32, 0.004, 0.2, true, ry);                      // the dark inside, seen when the lid is up
+      G.iron.box(x + (ns ? 0 : 0.126), 0.16, y + (ns ? 0.126 : 0), ns ? 0.05 : 0.008, 0.06, ns ? 0.008 : 0.05);
+      out.lids.push({ key: key, x: x, z: y, ry: ry, open: spent });              // drawn on its own, so it can swing
+      [-0.12, 0.12].forEach(function (o) { G.iron.box(x + (ns ? o : 0), 0.1, y + (ns ? 0 : o), ns ? 0.02 : 0.25, 0.202, ns ? 0.25 : 0.02, false); });
     } else if (t === 'trap') {
       if (hooks.trapShown && hooks.trapShown(key, ft)) { G.iron.box(x, 0.008, y, 0.5, 0.016, 0.5); G.glow.box(x, 0.018, y, 0.06, 0.004, 0.42, true, Math.PI / 4); G.glow.box(x, 0.018, y, 0.06, 0.004, 0.42, true, -Math.PI / 4); }
     } else if (t === 'plate') {
@@ -314,15 +340,25 @@
       skull(G.bone, x + 0.1, 0, y - 0.05, 0.4);
       for (var r2 = 0; r2 < 7; r2++) G.bone.box(x + (R(x, y, 150 + r2) - 0.5) * 0.4, 0.012, y + (R(x, y, 160 + r2) - 0.5) * 0.4, 0.022, 0.022, 0.14, true, R(x, y, 170 + r2) * 6);
     } else if (t === 'stairsDown' || t === 'stairsUp') {
-      if (F.entry && F.entry[0] === x && F.entry[1] === y && t === 'stairsUp') return;
       var dirIn = walls.length === 3 ? [0, 1, 2, 3].filter(function (q) { return walls.indexOf(q) < 0; })[0] : (ns ? 2 : 1);
-      var fx = -FWD[dirIn][0], fz = -FWD[dirIn][1];               // the steps run away from the way in
-      for (var s = 0; s < 5; s++) {
-        var cx = x + fx * (-0.4 + s * 0.2), cz = y + fz * (-0.4 + s * 0.2);
-        if (t === 'stairsUp') G.prop.box(cx, 0.06 + s * 0.12, cz, fx ? 0.2 : 0.9, 0.12 + s * 0.24, fz ? 0.2 : 0.9);
-        else G.prop.box(cx, -0.06 - s * 0.12, cz, fx ? 0.2 : 0.9, 0.12, fz ? 0.2 : 0.9);
+      var fx = -FWD[dirIn][0], fz = -FWD[dirIn][1], up = t === 'stairsUp';   // the steps run away from the way in
+      var n = up ? 6 : 7, sg = new Geo();
+      for (var s2 = 0; s2 < n; s2++) {
+        // up: rising away from the way in. down: dropping toward it, so you look onto the treads, not behind the rim
+        var at = up ? s2 : n - 1 - s2;
+        var cx = x + fx * (-0.5 + (at + 0.5) / n), cz = y + fz * (-0.5 + (at + 0.5) / n);
+        var top = up ? (s2 + 1) * 0.2 : -(s2 + 1) * 0.1 + 0.02, bot = up ? 0 : -1.3;
+        sg.box(cx, (top + bot) / 2, cz, fx ? 1 / n : 0.98, top - bot, fz ? 1 / n : 0.98);
       }
-      if (t === 'stairsDown') { out.stairsDown = out.stairsDown || []; out.stairsDown.push([x, y]); }
+      if (!up) {                                                                    // a low kerb round the well, but not on the way in
+        [0, 1, 2, 3].forEach(function (q) {
+          if (q === dirIn || walls.indexOf(q) >= 0) return;
+          var kx = x + FWD[q][0] * 0.46, kz = y + FWD[q][1] * 0.46;
+          G.prop.box(kx, 0.07, kz, FWD[q][0] ? 0.08 : 1.0, 0.14, FWD[q][1] ? 0.08 : 1.0);
+        });
+      }
+      out.stairs.push({ key: key, geo: sg });                                       // its own piece: not drawn while you stand on it
+      if (!up) { out.stairsDown = out.stairsDown || []; out.stairsDown.push([x, y]); }
     } else if (t === 'teleporter') {
       G.glow.lathe(x, 0.006, y, [[0.4, 0], [0.38, 0.004], [0.3, 0.004], [0.28, 0]], 24);
     } else if (t === 'staff') {
@@ -527,6 +563,14 @@
       return [x[0], y[0], z[0], 0, x[1], y[1], z[1], 0, x[2], y[2], z[2], 0,
         -(x[0] * e[0] + x[1] * e[1] + x[2] * e[2]), -(y[0] * e[0] + y[1] * e[1] + y[2] * e[2]), -(z[0] * e[0] + z[1] * e[1] + z[2] * e[2]), 1];
     }
+    function T4(x, y, z) { return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]; }
+    function RY4(a) { var c = Math.cos(a), s = Math.sin(a); return [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]; }
+    function RX4(a) { var c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, 0, c, -s, 0, 0, s, c, 0, 0, 0, 0, 1]; }
+    var LID_OPEN = 1.9;
+    function lidModel(l, ang) { return new Float32Array(mul(mul(T4(l.x, 0.2, l.z), RY4(l.ry)), mul(T4(0, 0, -0.125), RX4(ang)))); }
+    var lidMesh = (function () { var g = new Geo(); g.box(0, 0.025, 0.125, 0.37, 0.05, 0.25); return g; })();
+    var lidBand = (function () { var g = new Geo(); [-0.12, 0.12].forEach(function (o) { g.box(o, 0.028, 0.125, 0.025, 0.056, 0.255); }); return g; })();
+    var coinGeo = (function () { var g = new Geo(); g.lathe(0, -0.004, 0, [[0, 0], [0.024, 0], [0.024, 0.008], [0, 0.008]], 12); return g; })();
     function modelOf(m) { var c = Math.cos(m.yaw), s = Math.sin(m.yaw); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, m.x, 0, m.z, 1]); }
     var CUBE_DIRS = [[[1, 0, 0], [0, -1, 0]], [[-1, 0, 0], [0, -1, 0]], [[0, 1, 0], [0, 0, 1]], [[0, -1, 0], [0, 0, -1]], [[0, 0, 1], [0, -1, 0]], [[0, 0, -1], [0, -1, 0]]];
     var CASTERS = ['wall', 'iron', 'prop', 'wood', 'bone', 'clay', 'chain', 'stem', 'cap', 'crystal'];
@@ -543,6 +587,7 @@
         gl.uniformMatrix4fv(SH.U.uModel, false, IDENT); gl.uniform1f(SH.U.uAlpha, 0);
         CASTERS.forEach(function (n) { if (meshes[n]) meshes[n].draw(); });
         doorMeshes.forEach(function (dm) { dm.mesh.draw(); });
+        stairMeshes.forEach(function (dm) { dm.mesh.draw(); });
         gl.uniform1f(SH.U.uAlpha, 0.45); gl.activeTexture(gl.TEXTURE0);
         figures.forEach(function (m) { if (!m.mini) return; gl.uniformMatrix4fv(SH.U.uModel, false, modelOf(m)); gl.bindTexture(gl.TEXTURE_2D, m.mini.tex); m.mini.front.draw(); });
       }
@@ -568,7 +613,8 @@
 
     /* ---- the floor, as built ---- */
     var baker = new M.Baker(gl, opts.atlasImg || null, opts.atlasIndex || {});
-    var F = null, zoneKey = 'damp', Z = M.ZONES.damp, hooks = {}, meshes = {}, doorMeshes = [], figures = [], lamps = [], fixtures = [], mats = {}, sig = '', shadowStale = true;
+    var lidM = null, bandM = null, coinM = null;
+    var F = null, zoneKey = 'damp', Z = M.ZONES.damp, hooks = {}, meshes = {}, doorMeshes = [], stairMeshes = [], figures = [], lamps = [], lids = [], fixtures = [], mats = {}, sig = '', shadowStale = true;
     function lin(h, k) { return M.hex(h).map(function (v) { return Math.pow(v, 2.2) * (k || 1); }); }
     function scale(hexc, k) { return '#' + M.hex(hexc).map(function (v) { var n = Math.round(Math.min(1, v * k) * 255); return (n < 16 ? '0' : '') + n.toString(16); }).join(''); }
 
@@ -581,9 +627,12 @@
       P.fixtures.forEach(function (f) { if (f.kind === 'skull') skull(P.geo.bone, f.at[0], f.at[1], f.at[2], 0.4); else urn(P.geo.clay, f.at[0], f.at[1], f.at[2]); });
       GEO_NAMES.forEach(function (n) { if (P.geo[n].count()) meshes[n] = new Mesh(P.geo[n]); });
       doorMeshes = P.doors.map(function (d) { return { key: d.key, secret: d.secret, mesh: new Mesh(d.geo) }; });
+      stairMeshes.forEach(function (d) { d.mesh.free(); });
+      stairMeshes = P.stairs.map(function (d) { return { key: d.key, mesh: new Mesh(d.geo) }; });
       var old = {}; figures.forEach(function (m) { old[m.key + '|' + m.fig] = m.yaw; });
       figures = P.minis.map(function (m) { return { fig: m.fig, x: m.x, z: m.z, key: m.key, grey: m.grey, mini: miniFor(m.fig, m.faction, m.tall), yaw: old[m.key + '|' + m.fig] }; });
-      lamps = P.lamps; shadowStale = true; torchAt = null;
+      lamps = P.lamps; lids = P.lids; shadowStale = true; torchAt = null;
+      if (!lidM) { lidM = new Mesh(lidMesh); bandM = new Mesh(lidBand); coinM = new Mesh(coinGeo); }
       Object.keys(lampShadow).forEach(function (k) { lampShadow[k].stale = true; });
     }
     function rebake() {
@@ -620,7 +669,10 @@
         var flick = calm ? 1 : 1 + 0.07 * Math.sin(s * 7.3) + 0.04 * Math.sin(s * 12.9 + 1.7) + 0.02 * Math.sin(s * 23.1);
         var fx = Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), back = 0.30 - (cam.nudge || 0);
         var ex = cam.x - fx * back, ey = 0.47 - (cam.bob || 0), ez = cam.z - fz * back;
-        var VP = new Float32Array(mul(persp((cam.fov || 62) * Math.PI / 180, W / Hc, 0.04, 30), mul([Math.cos(cam.yaw), 0, -Math.sin(cam.yaw), 0, 0, 1, 0, 0, Math.sin(cam.yaw), 0, Math.cos(cam.yaw), 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -ex, -ey, -ez, 1])));
+        var pc = Math.cos(cam.pitch || 0), ps = Math.sin(cam.pitch || 0);           // looking down, at a chest being opened
+        var VP = new Float32Array(mul(persp((cam.fov || 62) * Math.PI / 180, W / Hc, 0.04, 30), mul([1, 0, 0, 0, 0, pc, ps, 0, 0, -ps, pc, 0, 0, 0, 0, 1], mul([Math.cos(cam.yaw), 0, -Math.sin(cam.yaw), 0, 0, 1, 0, 0, Math.sin(cam.yaw), 0, Math.cos(cam.yaw), 0, 0, 0, 0, 1], [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -ex, -ey, -ez, 1]))));
+        var loot = cam.loot || null, lootE = 0, lootLid = null;
+        if (loot) { lootE = 1 - Math.pow(1 - Math.min(1, Math.max(0, (loot.p - 0.12) / 0.4)), 3); lootLid = lids.filter(function (l) { return l.key === loot.key; })[0] || null; }
         var rx = Math.cos(cam.yaw), rz = Math.sin(cam.yaw), torch = [ex + fx * 0.15 + rx * 0.14, ey - 0.08, ez + fz * 0.15 + rz * 0.14];
         // sight: how far the light reaches decides how bright the torch is and how thick the dark
         var sight = cam.sight != null ? cam.sight : 3, reach = Math.max(0.8, Math.min(6, sight));
@@ -643,8 +695,9 @@
           var moved = !torchAt || Math.abs(torchAt[0] - torch[0]) + Math.abs(torchAt[1] - torch[1]) + Math.abs(torchAt[2] - torch[2]) > 0.002;
           if (moved || shadowStale) { renderCube(torchCube, torch); torchAt = torch; shadowStale = false; }
         }
+        if (lootLid && loot.kind !== 'mimic' && lootE > 0) near = [{ p: [lootLid.x, 0.32, lootLid.z], id: -1, glow: lootE }].concat(near).slice(0, 6);
         var L = new Float32Array(24);
-        near.forEach(function (n, i) { L[i * 4] = n.p[0]; L[i * 4 + 1] = n.p[1]; L[i * 4 + 2] = n.p[2]; L[i * 4 + 3] = 0.6 * (calm ? 1 : 1 + 0.1 * Math.sin(s * (6 + i) + i)); });
+        near.forEach(function (n, i) { L[i * 4] = n.p[0]; L[i * 4 + 1] = n.p[1]; L[i * 4 + 2] = n.p[2]; L[i * 4 + 3] = n.glow != null ? 0.9 * n.glow : 0.6 * (calm ? 1 : 1 + 0.1 * Math.sin(s * (6 + i) + i)); });
         var fogC = lin(Z.fog), WT = M.WATERS[Z.water && Z.water !== 'none' ? Z.water : 'clear'];
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, Hc);
@@ -674,6 +727,8 @@
         });
         gl.uniform1f(P.uWater, 0); gl.uniform1i(P.uTerr, 0);
         stone('prop', mats.prop, 0.95, 4); stone('wood', mats.wood, 1, 4);
+        var here = cam.px + ',' + cam.pz;
+        stairMeshes.forEach(function (d) { if (d.key !== here) stone(d.mesh, mats.floor, 0.9, 4); });   // steps in the floor's own stone
         doorMeshes.forEach(function (d) { gl.uniform1f(P.uRunes, mats.door && mats.door.runes ? 1 : 0); stone(d.mesh, d.secret ? mats.wall : mats.door, 1, 3, d.secret ? 0 : 1); });
         gl.uniform1f(P.uRunes, 0);
 
@@ -688,6 +743,39 @@
         flat('bone', '#d9ccad', null, 0.2); flat('clay', '#8a5a3a', null, 0.15); flat('stem', '#d8d0c0');
         flat('cap', '#20302c', lin(emitC, 1.2), 0.3); flat('crystal', '#5a3a8a', lin(emitC, 1.4), 1.0);
         flat('glow', '#000000', lin('#ffc860', 1.6 * flick)); flat('fountain', '#0c2a3a', lin('#3a90c0', 0.5), 1.5);
+        // chest lids, swinging up and back for the chest being opened; and its coins
+        lids.forEach(function (l) {
+          var ang = l.open ? LID_OPEN : 0, shake = 0;
+          if (lootLid === l) { ang = (loot.kind === 'mimic' ? 0.9 : LID_OPEN) * lootE; if (loot.kind === 'mimic' && loot.p > 0.3) shake = Math.sin(loot.p * 70) * 0.06; }
+          var Mm = lidModel(l, ang + shake);
+          gl.uniformMatrix4fv(Q.uModel, false, Mm); gl.bindTexture(gl.TEXTURE_2D, mats.wood ? mats.wood.tex : whiteTex);
+          gl.uniform1f(Q.uAlpha, 0); gl.uniform3fv(Q.uTint, lin('#7a5532')); gl.uniform3f(Q.uEmit, 0, 0, 0); gl.uniform1f(Q.uSpec, 0.15); lidM.draw();
+          gl.bindTexture(gl.TEXTURE_2D, whiteTex); gl.uniform3fv(Q.uTint, lin('#3a3836')); gl.uniform1f(Q.uSpec, 0.5); bandM.draw();
+        });
+        if (lootLid && loot.kind !== 'mimic') {
+          gl.uniformMatrix4fv(Q.uModel, false, new Float32Array(mul(T4(lootLid.x, 0.205, lootLid.z), RY4(lootLid.ry))));
+          gl.bindTexture(gl.TEXTURE_2D, whiteTex); gl.uniform3fv(Q.uTint, lin('#c8962c')); gl.uniform1f(Q.uSpec, 1.6);
+          for (var gk = 0; gk < 14; gk++) {                                            // a heap of coins in the chest
+            var ga = gk * 2.399, gr = 0.02 + 0.09 * Math.sqrt(gk / 14), gx = Math.cos(ga) * gr, gz = Math.sin(ga) * gr * 0.65;
+            gl.uniform3fv(Q.uEmit, lin('#ffb840', (0.25 + 0.35 * Math.max(0, Math.sin(s * 3 + gk * 1.7))) * lootE));
+            gl.uniformMatrix4fv(Q.uModel, false, new Float32Array(mul(mul(T4(lootLid.x, 0.206 + 0.014 * (1 - gr / 0.11), lootLid.z), RY4(lootLid.ry)), mul(T4(gx, 0, gz), RX4(0.35 * Math.sin(gk * 3.1))))));
+            coinM.draw();
+          }
+          for (var k = 0; k < (loot.coins || 0); k++) {
+            var st = 0.18 + 0.4 * (k / Math.max(1, loot.coins)), q = (loot.p - st) / 0.5; if (q <= 0 || q >= 1) continue;
+            var vx = ((k * 37) % 11 - 5) / 5, vz = ((k * 53) % 7 - 3) / 3;
+            var up = q < 0.45 ? Math.sin(q / 0.45 * Math.PI * 0.5) * 0.42 : 0.42 - Math.pow((q - 0.45) / 0.55, 2) * 0.2;
+            var tow = q < 0.45 ? 0 : Math.pow((q - 0.45) / 0.55, 2);                   // then off toward the party's purse
+            var cx2 = lootLid.x + vx * 0.08 * Math.min(1, q / 0.45), cz2 = lootLid.z + vz * 0.05 * Math.min(1, q / 0.45);
+            cx2 += (ex - cx2) * tow; cz2 += (ez - cz2) * tow; var cy2 = 0.22 + up - tow * 0.25;
+            gl.uniformMatrix4fv(Q.uModel, false, new Float32Array(mul(T4(cx2, cy2, cz2), mul(RY4(q * 9 + k), RX4(q * 14 + k)))));
+            gl.uniform3fv(Q.uTint, lin('#e3b040')); gl.uniform3fv(Q.uEmit, lin('#5a3a08')); gl.uniform1f(Q.uSpec, 1.5); coinM.draw();
+          }
+        }
+        if (lootLid && loot.kind === 'mimic' && loot.p > 0.25) {                    // something red, inside, waking
+          gl.uniformMatrix4fv(Q.uModel, false, new Float32Array(mul(mul(T4(lootLid.x, 0.21, lootLid.z), RY4(lootLid.ry)), [5.5, 0, 0, 0, 0, 0.2, 0, 0, 0, 0, 3.6, 0, 0, 0, 0, 1])));
+          gl.bindTexture(gl.TEXTURE_2D, whiteTex); gl.uniform3fv(Q.uTint, lin('#300404')); gl.uniform1f(Q.uSpec, 1.2); gl.uniform3fv(Q.uEmit, lin('#a01206', (0.6 + 0.4 * Math.sin(s * 9)) * lootE)); coinM.draw();
+        }
         gl.uniformMatrix4fv(Q.uModel, false, IDENT);
         // minis
         var MU = MS.U; gl.useProgram(MS.p); common(MU); gl.uniform1i(MU.uTex, 0); gl.uniform1i(MU.uNrm, 1);

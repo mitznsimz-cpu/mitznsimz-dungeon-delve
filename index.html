@@ -13816,7 +13816,15 @@ function v3dCam() {
   var x = walking ? prev.x + (pos.x - prev.x) * t : pos.x, z = walking ? prev.y + (pos.y - prev.y) * t : pos.y;
   var yaw = (turning ? pos.f - turning * (1 - turnT) : pos.f) * Math.PI / 2;
   var now = typeof performance !== 'undefined' ? performance.now() : Date.now(), dt = V3D_T ? Math.min(0.1, (now - V3D_T) / 1000) : 0.016; V3D_T = now;
-  return { x: x, z: z, yaw: yaw, px: pos.x, pz: pos.y, dt: dt, reduceMotion: reduceMotion,
+  // a chest being opened: look down at it, the lid swings, the coins come up (v6.0)
+  var loot = null, pitch = 0, nudge = 0;
+  if (LOOT) {
+    var lp = Math.min(1, (now - LOOT.t0) / 1000 / LOOT.dur), ein = Math.min(1, lp / 0.18), eout = lp > 0.85 ? (1 - lp) / 0.15 : 1;
+    var lk = easeInOut(Math.min(ein, eout));
+    loot = { key: pos.x + ',' + pos.y, p: lp, kind: LOOT.kind, coins: LOOT.coins };
+    pitch = 0.62 * lk; nudge = -0.12 * lk;
+  }
+  return { x: x, z: z, yaw: yaw, px: pos.x, pz: pos.y, dt: dt, reduceMotion: reduceMotion, loot: loot, pitch: pitch, nudge: nudge,
            bob: walking && !reduceMotion ? Math.sin(Math.PI * walkRaw) * 0.012 : 0,
            sight: (function () { var s = currentSight(); return s == null ? 3.4 : Math.max(0.8, s); })(),
            dpr: (window.devicePixelRatio || 1) * V3D_LEVELS[V3D_Q.level].scale, shadows: V3D_LEVELS[V3D_Q.level].shadows };
@@ -13836,7 +13844,11 @@ function v3dDraw() {
   var vg = g.createRadialGradient(w / 2, hh * 0.55, Math.min(w, hh) * 0.45, w / 2, hh * 0.55, Math.max(w, hh) * 0.95);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.45)');
   g.fillStyle = vg; g.fillRect(0, 0, w, hh);
-  if (LOOT) drawLoot(g, w, hh);
+  // the chest itself is drawn in 3D; only a mimic's red flash stays on top
+  if (LOOT && LOOT.kind === 'mimic') {
+    var mp = Math.min(1, (performance.now() - LOOT.t0) / 1000 / LOOT.dur);
+    if (mp > 0.7) { g.globalAlpha = (mp - 0.7) / 0.3 * 0.35; g.fillStyle = PAL.red; g.fillRect(0, 0, w, hh); g.globalAlpha = 1; }
+  }
 }
 /* the 3D view moves on its own (flame, water, dust), so it draws every frame
    while the dungeon is what you are looking at */

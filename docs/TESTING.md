@@ -301,7 +301,7 @@ built once; it is built again only when one of those answers changes.
   frame. `--view 3d` plays it in 3D, and `--shots N` takes a picture every N
   ticks to look at.
 
-The `view3d` runner (43 checks) builds every Ashkeld floor and a six-floor
+The `view3d` runner (48 checks) builds every Ashkeld floor and a six-floor
 delve in node, with no WebGL: a ceiling over every open square, a wall on every
 walled edge, a leaf for every door; an open door, a found seam, an opened chest
 and a beaten group each change what is built; every zone names materials,
