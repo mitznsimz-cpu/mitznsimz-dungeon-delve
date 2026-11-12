@@ -290,7 +290,9 @@ the same delve, as a new run.
 **On a phone (v6.1.1).** Held upright, the view grows to up to 1.2 times as tall as it is
 wide, and the log folds to where you stand and its last two lines. *Log* opens
 the whole of it over the screen; *Close* folds it again. The buttons sit at the
-bottom, under your thumbs, and the automap inset is smaller. Hanging chains in
+bottom, under your thumbs, and taller, and the automap inset is smaller. (v6.1.2) The party
+cards are slim: name and level, then each bar with its number beside it. The
+threat line moves up into the header, and the position readout is hidden. Hanging chains in
 3D are now interlocking links from a ceiling staple, one to three to a wall,
 some ending in an open manacle or a hook.
 

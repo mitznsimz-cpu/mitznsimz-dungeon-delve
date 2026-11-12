@@ -448,8 +448,21 @@
     #look.open #lookText{-webkit-line-clamp:unset;display:block}
     #look.open #mlog{flex:1 1 auto;max-height:none;overflow-y:auto;font-size:13px}
     #party{gap:5px}
-    #party .pc{padding:5px 7px}
-    #pad{grid-template-rows:46px 46px}
+    #pad{grid-template-rows:52px 52px}
+    /* slim party cards: name and level, then each bar with its number beside it */
+    #party .pc{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:5px;align-items:center;padding:4px 6px 5px}
+    #party .pc .nm{grid-column:1;font-size:11.5px}
+    #party .pc .cl{grid-column:2;font-size:9px}
+    #party .pc .cl .cn{display:none}
+    #party .pc .bar{grid-column:1;margin-top:3px;height:5px}
+    #party .pc .num{grid-column:2;margin-top:3px;font-size:9px;line-height:1}
+    #party .pc .num span:first-child{display:none}
+    /* the threat moves up into the header; the position readout goes (the
+       line under the view already says which way you face) */
+    #hud{display:none}
+    header #threat{flex:0 1 auto;font-size:10px;letter-spacing:.06em;white-space:nowrap;overflow:hidden}
+    header{align-items:center}
+    h1{flex:1 1 auto}
   }
   /* on a phone the passing message is smaller, so it hides less of the view */
   @media (max-width:600px){#msg{font-size:12px;padding:4px 9px;bottom:6px;max-width:calc(100% - 16px)}}
@@ -12409,7 +12422,7 @@ function renderParty() {
     else if (!cst) el.addEventListener('click', function () { openSheet(c); });
     el.innerHTML =
       '<div class="nm">' + esc(c.name) + '</div>' +
-      '<div class="cl">' + CLASSES[c.class].name.slice(0, 3) + ' &middot; L' + c.level +
+      '<div class="cl"><span class="cn">' + CLASSES[c.class].name.slice(0, 3) + ' &middot; </span>L' + c.level +
         (canLevel(c) ? ' <b class="rdy">&#9650;</b>' : '') + '</div>' +
       '<div class="bar bp ' + w + '"><i style="width:' + (100 * c.bp / mBP) + '%"></i></div>' +
       '<div class="num"><span>BP</span><span>' + c.bp + '/' + mBP + '</span></div>' +
@@ -12429,6 +12442,17 @@ var THREAT_FLAVOUR = [
   [85,  'You hear claws scraping against stone.'],
   [101, 'Something is hunting you.']
 ];
+
+/* v6.1.1: on a phone held upright the threat line sits in the header. */
+var PHONE_MQ = typeof matchMedia === 'function' ? matchMedia('(max-width:599px) and (orientation:portrait)') : null;
+function placeThreat() {
+  var t = document.getElementById('threat'), hd = document.querySelector('#app > header'), inv = document.getElementById('invBtn');
+  if (!t || !hd || !inv) return;
+  var phone = !!(PHONE_MQ && PHONE_MQ.matches);
+  if (phone && t.parentNode !== hd) hd.insertBefore(t, inv);
+  else if (!phone && t.parentNode === hd) hd.parentNode.insertBefore(t, hd.nextSibling);
+}
+if (PHONE_MQ) { placeThreat(); (PHONE_MQ.addEventListener ? PHONE_MQ.addEventListener('change', placeThreat) : PHONE_MQ.addListener(placeThreat)); }
 
 function renderThreat() {
   if (!party.length) { document.getElementById('threat').textContent = ''; return; }
