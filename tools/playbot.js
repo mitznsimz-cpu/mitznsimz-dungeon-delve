@@ -164,6 +164,8 @@ const PAGE = function () {
       return { do: 'click', sel: '#leaveTown', why: 'back to the tower' };
     }
 
+    // a first-run hint: read it and close it, as a new player would (most of the time)
+    if ((s === 'combat' || s === 'explore') && on('hint') && r.roll < 0.7) return { do: 'click', sel: '#hintOk', why: 'close the hint' };
     if (s === 'combat') return B.fight(r);
     return B.explore(r);
   };

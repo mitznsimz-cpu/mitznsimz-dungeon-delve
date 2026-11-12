@@ -240,5 +240,23 @@ console.log('\n[A10] About, Ko-fi and the website, to the Mitz & Simz standard')
   ok('it shows the version in the header', /function openAbout\(\) \{\s+var v = document\.querySelector\('h1 small'\)/.test(src));
 }
 
+console.log('\n[A11] first-run hints (v5.0)');
+ok('a hint card, out of the way, with Got it and No more hints',
+   /<div id="hint" role="status" aria-live="polite">/.test(src) && /id="hintOk"/.test(src) && /id="hintOff"/.test(src));
+const hintIds = ['walk', 'chest', 'fight', 'rest', 'train', 'wipe', 'trap'];
+const hb = src.slice(src.indexOf('var HINTS = {'), src.indexOf('var hintQueue'));
+ok('seven hints, each with its words', hintIds.every(id => new RegExp('\\n  ' + id + ': ').test(hb)));
+ok('each one is asked for at its moment', hintIds.every(id => src.indexOf("hint('" + id + "')") > 0));
+ok('a hint shows once: seen ones are remembered', /if \(!HINTS\[id\] \|\| PREFS\.hints === false \|\| \(PREFS\.hintsSeen \|\| \{\}\)\[id\]\) return;/.test(src) &&
+   /PREFS\.hintsSeen\[id\] = 1;/.test(src) && /hints: true, hintsSeen: \{\}/.test(src));
+ok('one at a time', /var hintQueue = \[\];/.test(src) && /hintQueue\.shift\(\)/.test(src));
+ok('never over the town, an event, the menu or the party screen',
+   /\['chooser', 'roster', 'menu', 'town', 'evt', 'inv', 'sheet', 'about', 'victory'\]/.test(src) && /#hint\{position:fixed;[^}]*z-index:22;/.test(src));
+ok('the menu can turn them off, and bring them all back',
+   /id="hintsToggle"/.test(src) && /id="hintsReset"/.test(src) && /PREFS\.hints = true; PREFS\.hintsSeen = \{\};/.test(src));
+ok('the words suit the device: keys on a computer, buttons on a phone',
+   /var touchy = /.test(src) && /walk: touchy\s*\?/.test(src));
+ok('on a phone the fight hint sits over the log, not the figures', /#combat\.on ~ #hint\{top:38vh\}/.test(src));
+
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — '+pass+' passed, '+fail+' failed\n');
 process.exit(fail?1:0);

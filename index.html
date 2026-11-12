@@ -533,6 +533,16 @@
     #acts{grid-area:acts;gap:4px}
     #acts button{min-height:34px;font-size:11px;line-height:1.15;padding:3px 4px}
   }
+  /* v5.0: first-run hints, one at a time, out of the way of the controls */
+  #hint{position:fixed;left:50%;transform:translateX(-50%);top:max(10px,env(safe-area-inset-top));z-index:22;
+    width:min(460px,calc(100% - 24px));display:none;background:#1c140d;border:1px solid var(--gold);
+    border-radius:8px;padding:10px 12px;box-shadow:0 6px 24px rgba(0,0,0,.55);font-size:13px;line-height:1.45}
+  #hint.on{display:block}
+  #hint .hintHead{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold);margin-bottom:4px}
+  #hint .hintRow{display:flex;gap:8px;justify-content:flex-end;margin-top:8px}
+  #hint button{height:30px;padding:0 12px;font-size:11px}
+  /* on a phone in a fight, over the log, not the figures it tells you to tap */
+  @media (max-width:599px){#combat.on ~ #hint{top:38vh}}
   @media (prefers-reduced-motion:reduce){button{transition:none}}
 </style>
 </head>
@@ -598,6 +608,8 @@
       <label class="vol">Volume <input type="range" id="soundVol" min="0" max="100" step="5" value="70"></label>
       <button id="motionToggle" aria-pressed="false">Reduced motion: off</button>
       <button id="pawsToggle" aria-pressed="true">Cat paws: on</button>
+      <button id="hintsToggle" aria-pressed="true">Hints: on</button>
+      <button id="hintsReset" title="Show every first-time hint again">Show hints again</button>
     </div>
     <div id="settingsNote" class="meta"></div>
   </div>
@@ -693,9 +705,12 @@
     <button id="evtClose" style="width:100%">Move on</button>
   </div>
 </div></div>
+<div id="hint" role="status" aria-live="polite"><div class="hintHead">Hint</div><div id="hintText"></div>
+  <div class="hintRow"><button id="hintOff" title="No more hints (turn them back on in the menu)">No more hints</button>
+  <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v4.9</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v5.0</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -10781,6 +10796,7 @@ function renderTargetLine() {
 
 function renderCombat() {
   if (!cst) return;
+  showHint();
   var i = activeActor(cst);
   document.getElementById('ctitle').textContent =
     cst.outcome ? ({ won: 'Victory', lost: 'Defeat', fled: 'Escaped' })[cst.outcome] : 'Combat';
@@ -10873,6 +10889,7 @@ function startCombat(monsterId, group, opts) {
   document.getElementById('combat').classList.add('on');
   renderCombat();
   settleFoes();                              // they may have the initiative (v4.9)
+  hint('fight');
 }
 
 function endCombat() {
@@ -10901,6 +10918,7 @@ function endCombat() {
     pos = { x: floor.entry[0], y: floor.entry[1], f: floor.entryFacing };
     prev = { x: pos.x, y: pos.y, f: pos.f };
     say('You wake at the tower door. ' + (r.lost > 0 ? r.lost + ' gold gone from your purse.' : 'Nothing left to lose.'));
+    hint('wipe');
   } else if (out === 'won') {
     var g = cst.foes.reduce(function (a, f) { return a + rollDice(actionRng, f.gold); }, 0);
     // what a mimic was sitting on (v4.8)
@@ -10914,6 +10932,8 @@ function endCombat() {
     if (g > 0) sfx('coin');
     threat = Math.max(0, threat - RULES.threat.perCombatWon);
     var ready = party.filter(canLevel).map(function (c) { return c.name; });
+    if (ready.length) hint('train');
+    if (party.some(function (c) { return c.bp > 0 && c.bp < maxBP(c) * 0.5; })) hint('rest');
     say(ready.length
       ? g + ' gold. ' + ready.join(' and ') + (ready.length > 1 ? ' have' : ' has') +
         ' learned enough \u2014 Mitz can train them.'
@@ -11807,6 +11827,7 @@ function beginDelve() {
   redraw();
   var b = pickBark(party, 'floor', actionRng);
   if (b) say(b.line, b.who);
+  hint('walk');
 }
 
 /* ---------- party panel ---------- */
@@ -11897,7 +11918,7 @@ var walkT = 1, walkDir = 0, animating = false;
    silent and nothing else changes. */
 var PREFS = loadPrefs();
 function loadPrefs() {
-  var d = { sound: true, volume: 0.7, reduce: null, paws: true };
+  var d = { sound: true, volume: 0.7, reduce: null, paws: true, hints: true, hintsSeen: {} };
   try {
     var raw = localStorage.getItem(MSDD_NS + 'prefs');
     var p = raw ? JSON.parse(raw) : null;
@@ -11931,6 +11952,49 @@ function setReduceMotion(on) {
   renderSettings();
 }
 // v4.9: Mitz and Simz sweeping the fallen off the table; off, the fallen fade
+/* ---------- v5.0: first-run hints ----------
+   Each hint shows once, the first time its moment comes, and is never shown
+   again unless the player asks for them back in the menu. One at a time: a
+   second waits until the first is dismissed. Never over the town, an event,
+   the menu or the party screen; in a fight it sits above the fight. */
+var touchy = typeof matchMedia === 'function' && matchMedia('(pointer:coarse)').matches;
+var HINTS = {
+  walk: touchy
+    ? 'Use the arrow buttons to walk and turn. Use acts on whatever is in front of you or underfoot. The map fills in as you explore: tap it to see the whole floor.'
+    : 'Arrow keys or W and S to walk, Q and E (or A and D) to turn. Space uses whatever is in front of you or underfoot. The map fills in as you explore.',
+  chest: 'A chest. Press Use to open it. Some are trapped: a Rogue up front, or a search (' + (touchy ? 'the Search button' : 'F') + '), may find the trap first.',
+  fight: 'Each hero acts in turn: pick what they do. ' + (touchy ? 'Tap an enemy, or a name in the list,' : 'Click an enemy, or a name in the list,') +
+         ' to choose the target. In a passage only the front two can swing a hand weapon; the back rank shoots or casts.',
+  rest: 'The party is hurt. Rest mends some BP and MP, but each floor has only a few safe places, and resting can draw a fight.',
+  train: 'Someone has the experience for a new level. Go back to where you came in, and train them at the temple in town.',
+  wipe: 'Everyone fell. You wake at the tower door with a little BP, and some of your gold is gone. Rest, or visit the temple in town.',
+  trap: 'A trap. Searching (' + (touchy ? 'the Search button' : 'F') + ') or a Rogue up front can find them before they spring. Facing a found trap, Use tries to disarm it.'
+};
+var hintQueue = [];
+function hint(id) {
+  if (!HINTS[id] || PREFS.hints === false || (PREFS.hintsSeen || {})[id]) return;
+  if (hintQueue.indexOf(id) < 0) hintQueue.push(id);
+  showHint();
+}
+function hintBlocked() {
+  return ['chooser', 'roster', 'menu', 'town', 'evt', 'inv', 'sheet', 'about', 'victory'].some(function (id) {
+    var el = document.getElementById(id); return el && el.classList.contains('on');
+  });
+}
+function showHint() {
+  var card = document.getElementById('hint');
+  if (!card) return;
+  if (!hintQueue.length || PREFS.hints === false || hintBlocked()) { card.classList.remove('on'); return; }
+  document.getElementById('hintText').textContent = HINTS[hintQueue[0]];
+  card.classList.add('on');
+}
+function dismissHint(all) {
+  var id = hintQueue.shift();
+  if (id) { PREFS.hintsSeen = PREFS.hintsSeen || {}; PREFS.hintsSeen[id] = 1; }
+  if (all) { PREFS.hints = false; hintQueue = []; }
+  savePrefs(); renderSettings(); showHint();
+}
+
 function setPaws(on) {
   PREFS.paws = !!on; savePrefs();
   renderSettings();
@@ -11946,6 +12010,8 @@ function renderSettings() {
   v.disabled = !SOUND || !PREFS.sound;
   m.textContent = 'Reduced motion: ' + (reduceMotion ? 'on' : 'off');
   m.setAttribute('aria-pressed', String(!!reduceMotion));
+  var hb = document.getElementById('hintsToggle');
+  if (hb) { hb.textContent = 'Hints: ' + (PREFS.hints !== false ? 'on' : 'off'); hb.setAttribute('aria-pressed', String(PREFS.hints !== false)); }
   var pw = document.getElementById('pawsToggle');
   if (pw) {
     pw.textContent = 'Cat paws: ' + (PREFS.paws !== false ? 'on' : 'off');
@@ -12073,6 +12139,7 @@ function collapseBridge(key) {
 
 /* Spring a trap where the party is: the rules say what it did; this plays it. */
 function springHere(ft, kind, key) {
+  hint('trap');
   if (key && consumed.indexOf(key) < 0) consumed.push(key);
   var terr = terrainAt(floor, pos.x, pos.y, clearedHere());
   var fireMult = terr === 'water' ? 0.5 : terr === 'embers' ? 1.5 : 1;
@@ -14674,6 +14741,7 @@ function refreshUseButton() {
 }
 
 function redraw() {
+  showHint();
   applyFloorState(floor);
   var tag = document.getElementById('floorTag');
   if (tag) tag.textContent = floor.name;
@@ -14840,6 +14908,7 @@ function step(dir, sliding) {
 
   var offer = interactable(feat, pos.x, pos.y);
   if (offer && feat.type !== 'textTrigger') say(offer + '  \u2014 press Use.');
+  if (offer && feat.type === 'chest') hint('chest');
   else if (feat && feat.type === 'monster' &&
            consumed.indexOf(pos.x + ',' + pos.y) < 0) say('Something is standing in the passage.');
 
@@ -15245,6 +15314,15 @@ document.getElementById('soundVol').addEventListener('input', function (e) { set
 document.getElementById('soundVol').addEventListener('change', function () { sfx('coin'); });
 document.getElementById('motionToggle').addEventListener('click', function () { setReduceMotion(!reduceMotion); });
 document.getElementById('pawsToggle').addEventListener('click', function () { setPaws(PREFS.paws === false); });
+document.getElementById('hintsToggle').addEventListener('click', function () {
+  PREFS.hints = PREFS.hints === false; if (!PREFS.hints) hintQueue = []; savePrefs(); renderSettings(); showHint();
+});
+document.getElementById('hintsReset').addEventListener('click', function () {
+  PREFS.hints = true; PREFS.hintsSeen = {}; savePrefs(); renderSettings();
+  document.getElementById('settingsNote').textContent = 'Every hint will show again, the next time its moment comes.';
+});
+document.getElementById('hintOk').addEventListener('click', function () { dismissHint(false); });
+document.getElementById('hintOff').addEventListener('click', function () { dismissHint(true); });
 renderSettings();
 
 document.getElementById('expParty').addEventListener('click', function () {

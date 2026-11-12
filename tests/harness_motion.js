@@ -425,7 +425,7 @@ console.log('\n[MO9] the paws, after Hold the Line: one swipe for the lot');
      /STAGE\.fxm\.drawFx\(now\);\s+stageCollars\(g, c\.w, now\);/.test(src));
   ok('the page keeps who is lying and when the last swipe came', /lying: lyingAt\(now\), sinceSwipe: now - STAGE\.lastSwipe/.test(src) &&
      /function stageNoteSweep\(r, base\)/.test(src) && /STAGE\.lying = \{\}; STAGE\.lastSwipe = -99;/.test(src));
-  ok('a Cat paws setting, on unless switched off, and kept', /id="pawsToggle"/.test(src) && /reduce: null, paws: true \};/.test(src) &&
+  ok('a Cat paws setting, on unless switched off, and kept', /id="pawsToggle"/.test(src) && /reduce: null, paws: true[,}]/.test(src) &&
      /function setPaws\(on\)/.test(src));
 }
 

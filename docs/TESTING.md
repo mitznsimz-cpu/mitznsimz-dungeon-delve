@@ -266,6 +266,15 @@ Individual runners work too, if you're iterating on one area:
 node tests/harness_combat.js
 ```
 
+### First-run hints (v5.0)
+
+A new player gets a short hint the first time each thing happens: the first
+steps, the first chest, the first fight, the first trap, the party first badly
+hurt, the first hero ready to level, and the first wipe. Each shows once. **Got
+it** closes it; **No more hints** turns them all off. In the menu, **Hints**
+turns them on or off, and **Show hints again** brings back every one. The
+words follow the device: keys on a computer, buttons on a phone.
+
 ### The play bot (v5.0)
 
 The runners test the rules directly. The play bot plays whole runs through the
