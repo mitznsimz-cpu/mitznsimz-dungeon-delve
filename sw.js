@@ -1,11 +1,13 @@
 /* Mitz & Simz: Dungeon Delve — offline cache.
    Cache-first: the game is a single file with no network dependencies, so once
    it is cached it runs with the radio off. Bump CACHE on every release. */
-const CACHE = 'msdd-v5.4.0';
+const CACHE = 'msdd-v6.0.0';
 const ASSETS = [
   './',
   './index.html',
   './msdd_assets.js',          // wall textures; without it the walls are drawn as masonry
+  './msdd_materials.js',       // v6.0: the 3D view's stone, wood, water and zones
+  './msdd_view3d.js',          // v6.0: the 3D view; without it the view is drawn in 2D
   './motion.js',               // the shared motion module; without it fights are still
   './sound.js',                // the shared sound module; without it fights are silent
   './msdd.webmanifest',

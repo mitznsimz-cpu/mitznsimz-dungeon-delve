@@ -45,6 +45,11 @@ const JOBS = +opt('jobs', 4);
 // turn (up to three tries each), and passes only if every boss winds up on
 // screen and the bot answers it.
 const BOSSES = args.includes('--bosses');
+// --shots N: a picture of the screen every N ticks (to look at the view, v6.0)
+const SHOTS = +opt('shots', 0);
+// --view 2d|3d: which view to play in (v6.0). 2D by default: the bot checks the game, and here
+// the 3D view is drawn in software (about a second a frame). --view 3d for a short look at it.
+const VIEW = opt('view', '2d');
 fs.mkdirSync(OUT, { recursive: true });
 
 // a small seeded generator, so a failing run can be replayed exactly
@@ -377,7 +382,7 @@ async function playRun(browser, n, mode, motion) {
   let lastOutcome = null, fled = 0, fightLog = [], missed = 0, lastSig = '', still = 0, foesWait = 0, frozenFor = 0, wanderFor = 0;
   await page.goto('file://' + HTML);
   await page.waitForTimeout(400);
-  await page.evaluate(() => { try { localStorage.clear(); } catch (e) {} });
+  await page.evaluate((v) => { try { localStorage.clear(); if (v === '2d') localStorage.setItem((window.MSDD_NS || 'dev_') + 'prefs', JSON.stringify({ view3d: false })); } catch (e) {} }, VIEW);
   await page.reload(); await page.waitForTimeout(400);
   await page.evaluate(PAGE);
 
@@ -386,6 +391,7 @@ async function playRun(browser, n, mode, motion) {
   const bossTold = {}, bossTries = {};
   let bossQueue = null, bossNow = null;
   for (tick = 0; tick < TICKS; tick++) {
+    if (SHOTS && tick % SHOTS === 0) await shot('view');
     if (BOSSES) {
       // the last boss fight is over: move on once it was answered, or after three tries
       if (bossNow && !(await page.evaluate(() => !!window.cst).catch(() => true))) {

@@ -20,6 +20,8 @@ That's it.
 | --- | --- |
 | `index.html` | **The game.** Open this. Everything is inside it, including the drawn miniatures |
 | `msdd_assets.js` | Wall textures (CC0, from 3dtextures.me). Optional: without it the walls are drawn as masonry. Since v4.9 it carries no figure renders |
+| `msdd_materials.js` | v6.0: the 3D view's materials and zones: stone, wood, iron and doors drawn by a shader into textures, the coverings (moss, soot and lava, crystal, frost, dust, roots, sand, ore, fungus), water, and point-light shadows. Optional |
+| `msdd_view3d.js` | v6.0: the 3D view. Builds the floor from the game's own data and draws it in WebGL 2. Optional: without it, or without WebGL 2, or with the setting off, the view is drawn in 2D |
 | `motion.js` | Hold the Line's motion module (1.1.0), unchanged: wind-ups, hit-stop, knock-back, spells in flight, bits by material, a tumbling d20, dice pops, the cats' paw. Optional: without it fights are drawn still. Don't edit it here; new versions come from Hold the Line |
 | `sound.js` | Hold the Line's sound module (1.0.0), unchanged: 17 sounds made in the browser, no audio files. Optional: without it the game is silent. Don't edit it here either |
 | `packs/msdd_pack_ashkeld.json` | The bundled adventure as a standalone pack, for editing |
@@ -27,7 +29,7 @@ That's it.
 | `tests/run_gate.sh` | Runs every harness in order. Your pre-commit check |
 | `msdd_party_balance.js` | The party balance test: plays the campaign and an 8-floor delve with 13 party mixes and prints how each fares. `node msdd_party_balance.js` (about 15 seconds). Not part of the gate |
 | `mitznsimz_minis.js` | The miniatures library shared with Hold the Line (2.5.0: 94 figures and 133 poses). The game embeds it; the gate checks the copy matches |
-| `tests/harness_*.js` | 28 runners. `minis` covers the shared miniature library, `terrain` the floor's second layer, `campaign` saves, the town and banter, `motion` the fight animation, `bestiary` habitats and the creatures that live in them, `sound` sound.js and the game's settings, `dungeon` traps, chests, finds, mechanisms and the generator's dressing, `rogue` the Rogue, locks, signature moves, tools, spells and rings |
+| `tests/harness_*.js` | 29 runners. `view3d` covers the zones, the floor built in 3D and the hand-over between the views. `minis` covers the shared miniature library, `terrain` the floor's second layer, `campaign` saves, the town and banter, `motion` the fight animation, `bestiary` habitats and the creatures that live in them, `sound` sound.js and the game's settings, `dungeon` traps, chests, finds, mechanisms and the generator's dressing, `rogue` the Rogue, locks, signature moves, tools, spells and rings |
 
 
 ---
@@ -265,6 +267,46 @@ Individual runners work too, if you're iterating on one area:
 ```sh
 node tests/harness_combat.js
 ```
+
+### Into 3D (v6.0)
+
+The corridor is drawn in WebGL 2 by `msdd_view3d.js`, with the materials and
+zones from `msdd_materials.js`. The game still decides everything; the view
+asks it, through a few hooks in `index.html` (`v3dHooks`), which doors are open,
+which seams are found, what has been taken, which levers are thrown, which traps
+are known, which barriers are down and who is still standing. A new floor is
+built once; it is built again only when one of those answers changes.
+
+- **Moving:** the camera follows the game's own step and turn, so it is still
+  one square at a time, four ways to face, with the v5.2 glides and head dip.
+- **Zones:** each floor wears one of 16 zones. Ashkeld's floors name theirs in
+  the pack (`"zone": "damp"`, `"sewer"`, `"arcane"`). Each delve theme names two,
+  worn the first and the second time round the themes. Without a zone, a floor
+  gets one by its habitat, then by its wall texture.
+- **Light:** the torch you carry and the wall torches the game already hangs,
+  each lighting the stone per pixel, with shadows from the torch and the two
+  nearest wall torches. How far you can see (`currentSight`) sets how bright
+  the torch is and how thick the dark.
+- **Things:** doors in frames (swung open once opened; a seam nobody has found
+  is just wall), portcullises that rise, chests whose lids are thrown back,
+  levers, plates, shrines, fountains, campfires, stairs, pits and chasms with
+  bridges, and paper-thick minis on bases for the monsters waiting in a square,
+  turning to face the party.
+- **The settings:** `3D view: on/off` in the menu, remembered. It switches off
+  by itself without WebGL 2, and drops back to 2D if the browser loses the
+  context. If frames come slowly it lowers its sharpness, then turns shadows
+  off, and comes back up when there is room.
+- **The play bot** plays the 2D view by default: it checks the game, and in
+  headless Chromium the 3D view is drawn in software at about a second a
+  frame. `--view 3d` plays it in 3D, and `--shots N` takes a picture every N
+  ticks to look at.
+
+The `view3d` runner (43 checks) builds every Ashkeld floor and a six-floor
+delve in node, with no WebGL: a ceiling over every open square, a wall on every
+walled edge, a leaf for every door; an open door, a found seam, an opened chest
+and a beaten group each change what is built; every zone names materials,
+water, particles and clutter that exist; and the game's hand-over and fallback
+are in place.
 
 ### Ambush (v5.4)
 

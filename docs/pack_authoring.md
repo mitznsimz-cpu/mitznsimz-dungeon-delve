@@ -506,6 +506,22 @@ not every time. A trigger without lines for some archetype is warned about.
 
 ---
 
+## Zones (v6.0)
+
+In the 3D view a floor wears a zone: its stone, its covering, its water and its
+light. Name one on the floor:
+
+```json
+{ "id": "f2", "zone": "sewer", ... }
+```
+
+Zones: `damp` `sunken` `sewer` `overgrown` `lava` `infernal` `arcane` `frost`
+`crypt` `ossuary` `tomb` `dwarven` `mine` `fungal` `lodge` (a timber cellar)
+`tower` (the photo tiles). Without one, a floor gets a zone by its habitat
+(`flooded` sunken, `crypt` crypt, `warren` damp, `forge` lava, `deep` fungal,
+`ruin` overgrown), then by its wall texture. The 2D view still uses
+`materials` below.
+
 ## Materials
 
 A floor names a wall and a floor texture:

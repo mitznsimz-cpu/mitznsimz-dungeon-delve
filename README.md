@@ -17,6 +17,7 @@ Or download the repo and double-click `index.html`. It plays offline once loaded
 - **A dungeon that fights back:** hidden traps, chests that bite, fountains, altars, riddling statues, prisoners to free, pressure plates, portcullises, ice and one-way doors.
 - **A town** where Mitz keeps the temple and Simz the shop.
 - **Fights you can feel:** wind-ups, hit-stop, a tumbling d20, and sounds made in the browser, with no audio files.
+- **A corridor in true 3D (v6.0):** torchlight that falls off, stone with real relief, shadows, and paper-thick minis on bases. Sixteen zones, each with its own stone, covering and light: damp halls, sewers, sunken halls, lava forges, frost vaults, crypts, an ossuary and more. Moving is still one square at a time. Without WebGL 2 it draws the classic 2D view.
 - **Saves:** it autosaves as you go. You can export a whole game to a file and carry on on another device.
 
 ## Controls
@@ -39,11 +40,12 @@ On a touch screen, use the on-screen pad to move and turn. It also has Use, Sear
 | --- | --- |
 | `index.html` | **The game.** Everything it needs is inside, including the adventure and the miniatures |
 | `msdd_assets.js` | Wall textures. Optional: without it the walls are drawn as masonry |
+| `msdd_view3d.js`, `msdd_materials.js` | The 3D view (v6.0) and the materials and zones it draws with, all made in the browser. Optional: without them, or without WebGL 2, the view is drawn in 2D |
 | `motion.js`, `sound.js` | The fight animation and sound modules, shared with Hold the Line, a sister Mitz & Simz game. Optional |
 | `mitznsimz_minis.js` | The shared miniatures library. The game has a copy built in, and the tests check that the copy matches this file |
 | `sw.js`, `msdd.webmanifest`, `icon.svg`, `icon-*.png` | Offline play, and installing it as an app with its own icon |
 | `packs/` | The adventure as a standalone pack, for editing. `docs/pack_authoring.md` explains the format |
-| `tests/` | 28 headless test runners, and `run_gate.sh`, which runs them all |
+| `tests/` | 29 headless test runners, and `run_gate.sh`, which runs them all |
 | `tools/party_balance.js` | The party balance test: plays the campaign and an 8-floor delve with 13 party mixes. `node tools/party_balance.js` |
 | `docs/TESTING.md` | Running the game locally, the tests, and where everything lives in the code |
 
@@ -55,7 +57,7 @@ You need [Node](https://nodejs.org). From the top folder:
 sh tests/run_gate.sh
 ```
 
-It runs 28 runners with 2,354 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
+It runs 29 runners with 2,397 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
 
 ## Licence
 
