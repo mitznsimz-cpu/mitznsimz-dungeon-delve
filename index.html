@@ -4046,6 +4046,11 @@ function maxBP(ch) {
   return Math.max(ch.level, v);
 }
 
+/* v5.3.1: a lowered stat lowers the maxima; the current pools follow. */
+function fitPools(ch) {
+  if (ch.bp > maxBP(ch)) ch.bp = maxBP(ch);
+  if (ch.mp > maxMP(ch)) ch.mp = maxMP(ch);
+}
 function maxMP(ch) {
   var cls = CLASSES[ch.class];
   if (!cls.mpDie) return 0;
@@ -6033,6 +6038,7 @@ function oneFoeAttack(party, st, foe, atk, rng, ev) {
         var stat = STATS[Math.floor(rng() * STATS.length)];
         if (ch.stats[stat] > 3) {
           ch.stats[stat] -= 1;
+          fitPools(ch);
           ev.push({ kind: 'foehit', text: 'Something goes out of ' + ch.name + '. ' +
                                           STAT_NAME[stat] + ' drops to ' + ch.stats[stat] + '.' });
         }
@@ -8027,6 +8033,7 @@ function applyEffects(party, effects, rng) {
       var ch = e.who === 'best' ? alive[0] : alive[Math.floor(rng() * alive.length)];
       var was = ch.stats[e.stat];
       ch.stats[e.stat] = Math.max(3, Math.min(20, was + (e.amount || 1)));
+      fitPools(ch);
       out.notes.push(ch.name + "'s " + STAT_NAME[e.stat] + ' ' + (ch.stats[e.stat] >= was ? 'rises' : 'falls') + ' to ' + ch.stats[e.stat] + '.');
 
     } else if (e.kind === 'mp') {

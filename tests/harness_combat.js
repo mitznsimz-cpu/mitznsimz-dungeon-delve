@@ -17,7 +17,7 @@ const names = ['isFront','frontRank','backRank','foeFront','foeBack','meleeTarge
   'beginCombat','partyAction','foeTurns','advanceCombat','finishCombat','activeActor','livingFoes',
   'attackRoll','reviveAfterWipe','threatTriggers','describeFoes','foesBlockLine','makeGroup','setMonsterScale','currentMonsterScale','scaleFoe','scaleGroupSize','wasStruck','advanceCombat','activeActor','normalisePositions','startingKit','grantStartingSpells',
   'makeRng','makeParty','makeCharacter','maxBP','maxMP','partyDown','applyDamage','canLevel','levelUp',
-  'oneFoeTurn','attacksThisTurn','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
+  'oneFoeTurn','attacksThisTurn','fitPools','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
 const C = new Function(BOOT + grab('PARTY CORE') + '\n' + grab('SAVE CORE') + '\n' + grab('WORLD CORE') + '\n' + grab('EVENT CORE') + '\n' + grab('COMBAT CORE') + '\n' + grab('TOWN CORE') + '\n' + grab('INVENTORY CORE') +
   '\nreturn {' + names.join(',') + '};')();
 
@@ -554,6 +554,20 @@ ok('while one is due, the party cannot step, turn, use, search or rest',
    /function campRest\(\) \{\s*if \(sceneDue\) return false;/.test(src));
 ok('a second fight never replaces the first', /if \(cst\) return;\s*\/\/ never a second fight over the first/.test(src));
 ok('the town never opens over a fight', /function openTown\(\) \{\s*if \(!party\.length \|\| cst\) return;/.test(src));
+
+console.log('\n[C15] a lowered stat trims BP and MP to the new maxima (v5.3.1)');
+// The play bot saw a mage keep 5 MP of a 4 MP maximum after a drain.
+{
+  const p = freshParty(77), m = p[2], f = p[0];
+  m.mp = C.maxMP(m); m.stats.int = 3; m.stats.wis = 3; m.stats.cha = 3;
+  f.bp = C.maxBP(f); f.stats.con = 3;
+  C.fitPools(m); C.fitPools(f);
+  ok('MP never above the maximum after a drop', m.mp <= C.maxMP(m), m.mp + ' / ' + C.maxMP(m));
+  ok('BP never above the maximum after a drop', f.bp <= C.maxBP(f), f.bp + ' / ' + C.maxBP(f));
+  ok('a draining foe and a stat event both trim the pools',
+     /ch\.stats\[stat\] -= 1;\s*fitPools\(ch\);/.test(src) &&
+     /ch\.stats\[e\.stat\] = Math\.max\(3[^\n]*\n\s*fitPools\(ch\);/.test(src));
+}
 
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);
