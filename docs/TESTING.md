@@ -292,7 +292,12 @@ wide, and the log folds to where you stand and its last two lines. *Log* opens
 the whole of it over the screen; *Close* folds it again. The buttons sit at the
 bottom, under your thumbs, and taller, and the automap inset is smaller. (v6.1.2) The party
 cards are slim: name and level, then each bar with its number beside it. The
-threat line moves up into the header, and the position readout is hidden. Hanging chains in
+threat line moves up into the header, and the position readout is hidden.
+(v6.1.3) In a fight the figures get more than half the screen, and the actions
+fold: Attack and Defend stay on screen, and Spells, Skills and More (change
+rank, use an item, flee) open a menu over the stage. Spells and Skills show how
+many are ready (3/3). The menu closes when an action is chosen or the turn
+passes. Wider screens keep every action on show. Hanging chains in
 3D are now interlocking links from a ceiling staple, one to three to a wall,
 some ending in an open manacle or a hook.
 
