@@ -266,6 +266,39 @@ Individual runners work too, if you're iterating on one area:
 node tests/harness_combat.js
 ```
 
+### Ambush (v5.4)
+
+Now either side can be caught unready. An ambusher still takes the first round.
+Otherwise the party may see the enemy first, and the enemy loses round one. The
+odds are about one fight in eight, better with a Rogue alive and better again
+if the party searched within the last three steps (a careful approach). When
+it happens, any Rogue starts the fight in the shadows, ready to Assassinate or
+Backstab. A boss is never caught out.
+
+Bosses telegraph their big blow. On its turn in round two, and every third
+round after it lands, a boss winds up instead of attacking: a line in the log,
+a pulsing **!** over it on the stage, and *winding up* beside its name. It
+fights on as usual in the next round and lets the blow go when that round ends.
+A melee boss hits the front rank twice as hard as its best attack; a boss with
+a ranged attack hits everyone a little harder. Whoever chose **Defend** that
+round takes a quarter. Hurt it by 30% of its BP while it gathers, blind it
+with Dirty Trick, or Silence a caster, and it staggers: the blow comes apart.
+
+The party balance test plays both: the surprise round happens in its fights,
+and its tactics answer a wind-up the way that worked best (grit, Silence, or
+the biggest spell at the boss; bracing cost more rounds than it saved). The
+balance bands held: Ashkeld is finished by 64–92% of party mixes (was 56–92%),
+the Shade falls first time 65–83%, and the 8-floor delve now reaches 4.2–6.1
+(was 3.6–5.8). The play bot checks it on the real screen:
+
+```sh
+node tools/playbot.js index.html --bosses --runs 2 --mode both --jobs 2
+```
+
+levels the party up, fights every boss in the pack in turn, and fails with
+`no-tell` unless each one winds up where the bot can see it and the bot
+answers it (Dirty Trick or Silence if it has them, otherwise Defend).
+
 ### Dressed stone (v5.3)
 
 Walls carry cracks, moss, soot, drip stains, chains, cobwebs in the ceiling
@@ -330,7 +363,9 @@ a failing run can be played again exactly. Screenshots and `report.json` go in
 Its first runs found two bugs the runners never could: a fight could start
 while the town was opening (the town then sat over the fight, with its temple
 usable mid-fight), and a split or summoned foe copied its parent's name, so
-three "Rot Grub F" could stand in one fight.
+three "Rot Grub F" could stand in one fight. Its 200-run check of v5.3 found a
+third: a draining foe could lower a hero's casting stat and leave their MP
+above the new maximum (fixed in v5.3.1).
 
 ---
 

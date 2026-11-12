@@ -246,6 +246,7 @@
   #clog .say{color:var(--gold);font-style:italic}
   #acts.busy button{opacity:.55;pointer-events:none}
   #clog .crit,#clog .win{color:var(--gold)}
+  .rrow .tell{color:#ff8a3a;font-weight:700}
   #clog .foehit,#clog .down,#clog .lose{color:var(--red)}
   #clog .miss,#clog .foemiss,#clog .defend{color:var(--text-dim)}
   #cturn{font:11px/1 ui-monospace,Menlo,monospace;color:var(--stone)}
@@ -716,7 +717,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v5.3</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v5.4</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -5088,7 +5089,102 @@ function combatBanter(party, st, before, actorIdx, rng) {
   return null;
 }
 
-function beginCombat(party, foes, rng, ground) {
+/* ---- v5.4 Ambush: who sees whom first ----
+   An ambusher still takes the first round. Otherwise the party may see the
+   enemy first: more often with a Rogue alive to scout, more often again when
+   the party searched on its way in (a careful approach). Never a boss. */
+var SURPRISE = { base: 0.12, rogue: 0.14, careful: 0.12 };
+
+function surpriseChance(party, foes, opts) {
+  if (foes.some(function (f) { return hasTrait(f, 'ambush') || hasTrait(f, 'boss'); })) return 0;
+  var p = SURPRISE.base;
+  if (party.some(function (c) { return c.class === 'rogue' && c.bp > 0; })) p += SURPRISE.rogue;
+  if (opts && opts.careful) p += SURPRISE.careful;
+  return p;
+}
+
+function partyFirst(party, st) {
+  st.foesSurprised = true;
+  st.order = st.order.filter(function (e) { return e.side === 'party'; });   // they lose round one
+  st.log.push({ kind: 'crit', text: 'You see them before they see you. One free round.' });
+  party.forEach(function (c) {
+    if (c.class !== 'rogue' || c.bp <= 0 || isHeld(c)) return;
+    c.hidden = Math.max(c.hidden || 0, 2);                     // the Rogue opens from the dark
+    c.hiddenBonus = Math.max(c.hiddenBonus || 0, 4);
+    st.log.push({ kind: 'defend', text: c.name + ' is already in the shadows.' });
+  });
+}
+
+/* ---- v5.4: boss telegraphs ----
+   A boss winds up on its turn, holds it through the next round, and lets it
+   go when that round ends. Defend cuts the blow to a quarter for whoever braced; hurting
+   it hard enough in between (a quarter of its BP), blinding it, or silencing a
+   caster staggers it, and the blow comes apart. */
+var TELL = { first: 2, every: 3, mult: 2.0, area: 1.3, braced: 0.25, stagger: 0.3 };
+var BOSS_TELLS = {
+  'mn.goblinChief': ['The Chief plants its feet and swings the axe up over its head.',
+                     'The axe comes round in one great flat arc.'],
+  'mn.shade': ['The Shade lifts the staff. The runes in the floor begin to drink the light.',
+               'The vault goes white, and the staff comes down.'],
+  'mn.barrowLich': ['The Lich spreads its fingers. Frost creeps out across the stones.',
+                    'The cold breaks over the party like a wave.'],
+  'mn.stoneColossus': ['The Colossus raises both fists. Grit rains from the ceiling.',
+                       'The fists come down, and the floor jumps.'],
+  'mn.youngDragon': ['The dragon rears back, and its throat glows through the scales.',
+                     'Fire fills the passage.']
+};
+function tellFor(foe) {
+  var base = foe.name.replace(/ [A-Z]$/, '');
+  return BOSS_TELLS[foe.ref] || [base + ' draws itself up. Something big is coming.', base + ' lets it go.'];
+}
+function tellIsArea(foe) {
+  return (foe.attacks || []).some(function (a) { return a.reach === 'ranged'; });
+}
+function tellStaggered(st, foe) {
+  return foe.blinded > 0 || (st.silence > 0 && hasTrait(foe, 'caster')) ||
+         (foe.windupBP - foe.bp) >= foe.bpMax * TELL.stagger;
+}
+
+/* On the boss's own turn: wind up (that is its turn), or fight on as usual. Returns events
+   if it spent its turn that way, or null to fight as usual. */
+function bossTell(party, st, foe) {
+  if (!hasTrait(foe, 'boss')) return null;
+  if (foe.windup) return null;            // it fights on while it holds it
+  if (st.round < (foe.nextTell || TELL.first) || foe.blinded > 0) return null;
+  foe.windup = st.round; foe.windupBP = foe.bp;
+  return [{ kind: 'crit', text: tellFor(foe)[0], tell: foe.uid }];
+}
+
+/* At the end of the round after the wind-up: the blow lands, or comes apart. */
+function bossUnleash(party, st, rng) {
+  var ev = [];
+  livingFoes(st).forEach(function (foe) {
+    if (!foe.windup || foe.windup >= st.round || st.outcome) return;
+    var stag = tellStaggered(st, foe);
+    foe.windup = 0; foe.nextTell = st.round + TELL.every;
+    var base = foe.name.replace(/ [A-Z]$/, '');
+    if (stag) { ev.push({ kind: 'win', text: base + ' staggers, and the gathered blow comes apart.' }); return; }
+    var area = tellIsArea(foe);
+    var who = (area ? party : engagedParty(party, st)).filter(function (c) { return targetable(c); });
+    if (!who.length) who = party.filter(function (c) { return targetable(c); });
+    var best = (foe.attacks || []).slice().sort(function (a, b) {
+      return (b.damage[0] * (b.damage[1] + 1) / 2 + (b.damage[2] || 0)) - (a.damage[0] * (a.damage[1] + 1) / 2 + (a.damage[2] || 0));
+    })[0];
+    ev.push({ kind: 'crit', text: tellFor(foe)[1] });
+    if (!best) return;
+    who.forEach(function (c) {
+      var n = Math.max(1, Math.round(rollDice(rng, best.damage) * (area ? TELL.area : TELL.mult)));
+      var braced = c.braced === st.round;
+      if (braced) n = Math.max(1, Math.floor(n * TELL.braced));
+      applyDamage(c, n);
+      ev.push({ kind: 'foehit', text: c.name + ' takes ' + n + (braced ? ', braced for it' : '') +
+                (c.bp <= 0 ? '. ' + c.name + ' goes down.' : '.') });
+    });
+  });
+  return ev;
+}
+
+function beginCombat(party, foes, rng, ground, opts) {
   var st = {
     round: 1, foes: foes, log: [], phase: 'party',
     queue: [], outcome: null, xpAwarded: 0, goldAwarded: 0,
@@ -5110,6 +5206,12 @@ function beginCombat(party, foes, rng, ground) {
   if (foes.some(function (f) { return hasTrait(f, 'ambush'); })) {
     st.surprised = true;
     st.log.push({ kind: 'bad', text: 'They were waiting. Nobody in the party is ready.' });
+  }
+  // v5.4: or the party sees them first, and takes a free round
+  var forced = opts && opts.surprise != null ? opts.surprise : null;
+  if (!st.surprised && forced !== false) {
+    var odds = surpriseChance(party, foes, opts);
+    if (forced === true || (odds > 0 && rng() < odds)) partyFirst(party, st);
   }
 
   if (foes.some(function (f) { return hasTrait(f, 'burrow'); })) {
@@ -5540,6 +5642,7 @@ function partyActionInner(party, st, action, targetIdx, rng, i) {
 
   } else if (action === 'defend') {
     ch.defBonus = 2;
+    ch.braced = st.round;                 // and braced against a boss's blow (v5.4)
     ev.push({ kind: 'defend', text: ch.name + ' sets their guard.' });
 
   } else if (action === 'forward' || action === 'back') {
@@ -5859,6 +5962,10 @@ function attacksThisTurn(foe, rng) {
 
 function oneFoeTurn(party, st, foe, rng) {
   var ev = [];
+  if (!st.outcome && foe.bp > 0) {                       // v5.4: a boss winds up instead
+    var tl = bossTell(party, st, foe);
+    if (tl) { st.log = st.log.concat(tl); return tl; }
+  }
   if (!st.outcome && foe.bp > 0) ev = ev.concat(signatureMoves(party, st, foe, rng));
   if (!st.outcome && foe.bp > 0) {
     attacksThisTurn(foe, rng).forEach(function (atk) {
@@ -6130,6 +6237,12 @@ function advanceCombat(party, st, rng) {
 
   if (awaitingParty(party, st)) { st.phase = 'party'; return st; }
 
+  // round over: a boss that wound up last round lets it go (v5.4)
+  var __u = snapshotBP(party, st), tl5 = bossUnleash(party, st, rng);
+  if (tl5.length) {
+    st.log = st.log.concat(tl5); markStruck(party, st, __u);
+    if (partyDown(party)) { finishCombat(party, st, 'lost'); return st; }
+  }
   // round over: anyone fighting beside the party strikes (v4.8)
   if (st.ally) {
     st.log = st.log.concat(allyTurn(st, rng));
@@ -10262,6 +10375,17 @@ var stageIdleTimer = setInterval(function () {
    give you figures a foot high. Below this, the stage and the slot decide. */
 var FIGHT_FIGURE_MAX = 260;
 
+/* v5.4: a boss winding up shows a pulsing ! over its head. */
+function tellMark(g, x, ground, hgt) {
+  var pulse = reduceMotion ? 1 : 0.75 + 0.25 * Math.sin(performance.now() / 160);
+  g.save();
+  g.font = 'bold ' + Math.round(Math.max(16, hgt * 0.24)) + 'px Georgia, serif';
+  g.textAlign = 'center'; g.textBaseline = 'bottom';
+  g.shadowColor = 'rgba(255,110,40,0.9)'; g.shadowBlur = 10 * pulse;
+  g.fillStyle = 'rgba(255,' + Math.round(150 + 60 * pulse) + ',60,1)';
+  g.fillText('!', x, ground - hgt * 1.15);
+  g.restore();
+}
 function drawFoes() {
   var c = fit(document.getElementById('foes')), g = c.g;
   g.clearRect(0, 0, c.w, c.h);
@@ -10363,6 +10487,7 @@ function drawFoes() {
         if (m.bp > 0) bar(x, ground, step, m.bp / m.bpMax);
         // four in a row aimed at together left no room for the words, and the
         // labels ran into each other; the reticle says it, so the letter will do
+        if (m.bp > 0 && m.windup) tellMark(g, x, ground, hgt);     // v5.4
         label(x, ground, LETTERS[idxAll] + (targeted && fits(LETTERS[idxAll] + '  \u25c0 TARGET', step) ? '  \u25c0 TARGET' : ''), targeted);
       } else {
         var pi = party.indexOf(m);
@@ -10656,6 +10781,7 @@ function renderRosterList() {
   hdr.textContent = 'Enemies';
   host.appendChild(hdr);
 
+  if (cst.foes.some(function (f) { return f.bp > 0 && f.windup; })) hint('tell');   // v5.4
   cst.foes.forEach(function (f, i) {
     var row = document.createElement('div');
     row.className = 'rrow' + (i === selFoe ? ' sel' : '') + (f.bp <= 0 ? ' dead' : '');
@@ -10664,7 +10790,8 @@ function renderRosterList() {
     row.innerHTML = '<span>' + LETTERS[i] + '&nbsp; ' + esc(f.name) +
       ' <span class="rk">' + (f.rank === 'back' ? 'BACK' : 'FRONT') +
       (f.bp > 0 && !reachable ? ' \u00b7 out of reach' : '') +
-      (f.bp > 0 && f.blinded > 0 ? ' \u00b7 half-blind' : '') + '</span></span>' +
+      (f.bp > 0 && f.blinded > 0 ? ' \u00b7 half-blind' : '') +
+      (f.bp > 0 && f.windup ? ' \u00b7 <b class="tell">winding up</b>' : '') + '</span></span>' +
       '<span>' + (f.bp > 0 ? f.bp : '\u2014') + '</span>';
     if (f.bp > 0) row.addEventListener('click', function () { selFoe = i; renderCombat(); });
     host.appendChild(row);
@@ -10923,7 +11050,9 @@ function startCombat(monsterId, group, opts) {
   if (opts.noAmbush) foes.forEach(function (f) { f.traits = (f.traits || []).filter(function (t) { return t !== 'ambush'; }); });
   if (foes.some(function (f) { return (f.traits || []).indexOf('boss') >= 0; })) sfx('horn');
   sfx('dice', 0.7);
-  cst = beginCombat(party, foes, actionRng, combatGround(floor, pos.x, pos.y, clearedHere()));
+  cst = beginCombat(party, foes, actionRng, combatGround(floor, pos.x, pos.y, clearedHere()),
+                    { careful: carefulSteps > 0 });
+  carefulSteps = 0;
   if (ally) {
     cst.ally = { name: ally.name, dice: ally.dice, toHit: ally.toHit };
     cst.log.push({ kind: 'start', text: ally.name + ' is with you, and steps up beside the front rank.' });
@@ -10935,6 +11064,7 @@ function startCombat(monsterId, group, opts) {
   renderCombat();
   settleFoes();                              // they may have the initiative (v4.9)
   hint('fight');
+  if (cst.foesSurprised) hint('ambush');
 }
 
 function endCombat() {
@@ -12016,6 +12146,8 @@ var HINTS = {
   rest: 'The party is hurt. Rest mends some BP and MP, but each floor has only a few safe places, and resting can draw a fight.',
   train: 'Someone has the experience for a new level. Go back to where you came in, and train them at the temple in town.',
   wipe: 'Everyone fell. You wake at the tower door with a little BP, and some of your gold is gone. Rest, or visit the temple in town.',
+  tell: 'A boss is winding up (the ! over it). The blow lands when this round ends. Defend braces against it; or hurt it badly, blind it, or silence a caster, and it staggers.',
+  ambush: 'You saw them first: they lose this round. A Rogue starts in the shadows, ready to strike. Searching on your way in makes this more likely.',
   trap: 'A trap. Searching (' + (touchy ? 'the Search button' : 'F') + ') or a Rogue up front can find them before they spring. Facing a found trap, Use tries to disarm it.'
 };
 var hintQueue = [];
@@ -15274,6 +15406,7 @@ function step(dir, sliding) {
   if (wasOn === 'rotten' && !floating()) collapseBridge(prev.x + ',' + prev.y);
 
   bumpThreat(RULES.threat.perStep);
+  if (carefulSteps > 0) carefulSteps--;            // v5.4: a search keeps you careful for a few steps
   tickEffects(party, 1);
   tickLight(1);
   tickSpells(1);
@@ -15517,8 +15650,10 @@ function interactHere() {
   redraw();
 }
 
+var carefulSteps = 0;                              // v5.4: steps left of a careful approach
 function doSearch() {
   if (!party.length || animating || cst || sceneDue) return;
+  carefulSteps = 3;
   var r = searchHere(party, floor, world, pos.x, pos.y, actionRng);
   say(r.notes.join(' '));
   if (r.found && r.found.length) sfx('chime', 0.7);

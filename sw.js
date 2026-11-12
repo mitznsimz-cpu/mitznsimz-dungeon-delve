@@ -1,7 +1,7 @@
 /* Mitz & Simz: Dungeon Delve — offline cache.
    Cache-first: the game is a single file with no network dependencies, so once
    it is cached it runs with the radio off. Bump CACHE on every release. */
-const CACHE = 'msdd-v5.3.1';
+const CACHE = 'msdd-v5.4.0';
 const ASSETS = [
   './',
   './index.html',

@@ -17,7 +17,7 @@ const names = ['isFront','frontRank','backRank','foeFront','foeBack','meleeTarge
   'beginCombat','partyAction','foeTurns','advanceCombat','finishCombat','activeActor','livingFoes',
   'attackRoll','reviveAfterWipe','threatTriggers','describeFoes','foesBlockLine','makeGroup','setMonsterScale','currentMonsterScale','scaleFoe','scaleGroupSize','wasStruck','advanceCombat','activeActor','normalisePositions','startingKit','grantStartingSpells',
   'makeRng','makeParty','makeCharacter','maxBP','maxMP','partyDown','applyDamage','canLevel','levelUp',
-  'oneFoeTurn','attacksThisTurn','fitPools','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
+  'oneFoeTurn','attacksThisTurn','fitPools','surpriseChance','partyFirst','bossTell','bossUnleash','TELL','SURPRISE','engagedParty','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
 const C = new Function(BOOT + grab('PARTY CORE') + '\n' + grab('SAVE CORE') + '\n' + grab('WORLD CORE') + '\n' + grab('EVENT CORE') + '\n' + grab('COMBAT CORE') + '\n' + grab('TOWN CORE') + '\n' + grab('INVENTORY CORE') +
   '\nreturn {' + names.join(',') + '};')();
 
@@ -567,6 +567,69 @@ console.log('\n[C15] a lowered stat trims BP and MP to the new maxima (v5.3.1)')
   ok('a draining foe and a stat event both trim the pools',
      /ch\.stats\[stat\] -= 1;\s*fitPools\(ch\);/.test(src) &&
      /ch\.stats\[e\.stat\] = Math\.max\(3[^\n]*\n\s*fitPools\(ch\);/.test(src));
+}
+
+console.log('\n[C16] the party can see them first (v5.4)');
+{
+  const rg = C.makeRng(5);
+  const p = C.makeParty(rg,[{name:'Bruda',class:'fighter'},{name:'Kesh',class:'fighter'},
+                            {name:'Sly',class:'rogue'},{name:'Ansel',class:'priest'}]);
+  C.grantStartingSpells(p);
+  const gob = C.makeEncounter('mn.goblin', rg), chief = C.makeEncounter('mn.goblinChief', rg);
+  ok('a Rogue and a careful approach each raise the odds',
+     C.surpriseChance(p, gob, {}) > C.SURPRISE.base && C.surpriseChance(p, gob, { careful: true }) > C.surpriseChance(p, gob, {}));
+  ok('never against a boss', C.surpriseChance(p, chief, { careful: true }) === 0);
+  const amb = C.makeEncounter('mn.goblin', rg); amb.forEach(f => f.traits = f.traits.concat(['ambush']));
+  ok('never against an ambusher', C.surpriseChance(p, amb, {}) === 0);
+  const st = C.beginCombat(p, gob, rg, null, { surprise: true });
+  ok('round one is the party\'s alone', st.foesSurprised && st.order.every(e => e.side === 'party'));
+  ok('the Rogue opens from the shadows', p[2].hidden > 0 && p[2].hiddenBonus >= 4);
+  ok('the log says so', st.log.some(e => /see them before they see you/.test(e.text)));
+  const st2 = C.beginCombat(p, C.makeEncounter('mn.goblin', rg), rg, null, { surprise: false });
+  ok('a search keeps the party careful for three steps, and the fight is told',
+     /carefulSteps = 3;/.test(src) && /\{ careful: carefulSteps > 0 \}/.test(src) && /if \(carefulSteps > 0\) carefulSteps--;/.test(src));
+  ok('forced off, nothing changes', !st2.foesSurprised && st2.order.some(e => e.side === 'foe'));
+}
+
+console.log('\n[C17] a boss winds up a round early, and can be braced for or staggered (v5.4)');
+{
+  const setup = (seed) => {
+    const rg = C.makeRng(seed);
+    const p = freshParty(seed);
+    const foes = C.makeEncounter('mn.goblinChief', rg);
+    const st = C.beginCombat(p, foes, rg, null, { surprise: false });
+    return { rg, p, st, boss: foes[0] };
+  };
+  let { rg, p, st, boss } = setup(11);
+  ok('no wind-up in round one', C.bossTell(p, st, boss) === null && !boss.windup);
+  st.round = 2;
+  const ev = C.bossTell(p, st, boss);
+  ok('round two: it winds up, and that is its turn', ev && ev[0].kind === 'crit' && boss.windup === 2);
+  ok('while it holds it, it fights on', C.bossTell(p, st, boss) === null);
+  ok('nothing lands in the round it winds up', C.bossUnleash(p, st, rg).length === 0);
+  st.round = 3;
+  const front = C.engagedParty(p, st);
+  front[0].braced = 3;                                          // Defend this round
+  p.forEach(c => { c.bp = 200; });
+  const before = front.map(c => c.bp);
+  const out = C.bossUnleash(p, st, rg);
+  ok('it lands when the next round ends', out.length > 1 && !boss.windup && boss.nextTell === 3 + C.TELL.every);
+  ok('the braced one takes far less', (before[0] - front[0].bp) < (before[1] - front[1].bp), (before[0] - front[0].bp) + ' vs ' + (before[1] - front[1].bp));
+  ok('a melee boss strikes only the front rank', p.filter(c => front.indexOf(c) < 0).every(c => c.bp === 200));
+
+  ({ rg, p, st, boss } = setup(12));
+  st.round = 2; C.bossTell(p, st, boss);
+  boss.bp -= Math.ceil(boss.bpMax * C.TELL.stagger);           // hurt hard while it gathers
+  st.round = 3; p.forEach(c => { c.bp = 200; });
+  const out2 = C.bossUnleash(p, st, rg);
+  ok('hurt hard enough, it staggers and nothing lands', /staggers/.test(out2[0].text) && p.every(c => c.bp === 200));
+
+  ({ rg, p, st, boss } = setup(13));
+  st.round = 2; C.bossTell(p, st, boss); boss.blinded = 2;
+  st.round = 3; p.forEach(c => { c.bp = 200; });
+  ok('grit in its eyes staggers it too', /staggers/.test(C.bossUnleash(p, st, rg)[0].text));
+  ok('Defend braces, in the rules', /action === 'defend'\) \{\s*ch\.defBonus = 2;\s*ch\.braced = st\.round;/.test(src));
+  ok('the wind-up shows on the fight screen', /f\.windup \? ' \\u00b7 <b class="tell">winding up<\/b>'/.test(src) && /tellMark\(g, x, ground, hgt\)/.test(src));
 }
 
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');

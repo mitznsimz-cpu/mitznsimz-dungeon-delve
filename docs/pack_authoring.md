@@ -529,6 +529,16 @@ their sculptors give permission, and every figure is drawn.
 
 ---
 
+## Bosses (v5.4)
+
+Any monster with the `boss` trait telegraphs a big blow: it winds up on its turn
+in round two and every third round after, and lets the blow go at the end of
+the next round. It is never caught by surprise. A boss with a `ranged` attack
+hits the whole party; one without hits the front rank, harder. The engine has
+its own lines for the bosses in the bundled pack (the Goblin Chief, the Shade of
+Ashkeld, the Barrow Lich, the Stone Colossus and the Young Red Dragon); any
+other boss gets a plain "draws itself up. Something big is coming."
+
 ## How a floor is dressed (v5.3)
 
 You don't place wall detail or floor clutter: the game chooses it for each wall

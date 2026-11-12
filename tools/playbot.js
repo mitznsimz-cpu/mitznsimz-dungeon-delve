@@ -41,6 +41,10 @@ const W = +opt('width', 1280), H = +opt('height', 800);
 const OUT = path.resolve(opt('out', 'playbot-out'));
 const QUIET = args.includes('--quiet');
 const JOBS = +opt('jobs', 4);
+// --bosses: v5.4 check. Each run levels the party up and fights every boss in
+// turn (up to three tries each), and passes only if every boss winds up on
+// screen and the bot answers it.
+const BOSSES = args.includes('--bosses');
 fs.mkdirSync(OUT, { recursive: true });
 
 // a small seeded generator, so a failing run can be replayed exactly
@@ -198,6 +202,14 @@ const PAGE = function () {
     var low = party.some(function (c) { return c.bp > 0 && c.bp < maxBP(c) * 0.4; });
     var find = function (re) { for (var k = 0; k < names.length; k++) if (re.test(names[k])) return k; return -1; };
     var pickI = -1;
+    // v5.4: a boss winding up shows on the screen. Answer it as a player would:
+    // grit in its eyes or Silence if there is one, otherwise brace.
+    var tell = Array.from(document.querySelectorAll('#cRoster .tell')).filter(vis).length > 0;
+    if (tell) {
+      pickI = find(/^(Dirty Trick|Silence)/);
+      if (pickI < 0) pickI = find(/^Defend/);
+      if (pickI >= 0) return press('#acts button', bs[pickI], party[i].name + ' answers the wind-up: ' + names[pickI], { tell: true });
+    }
     if (low) pickI = find(/^(Cure|Heal|Mend|Bless)/);
     if (pickI < 0 && r.roll < 0.2) { var spells = names.map(function (n, k) { return /^(Attack|Shoot|Defend|Use|Flee|Run)/.test(n) ? -1 : k; }).filter(function (k) { return k >= 0; });
       if (spells.length) pickI = spells[Math.floor(r.roll2 * spells.length)]; }
@@ -361,7 +373,7 @@ async function playRun(browser, n, mode, motion) {
     return d.accept(String(seed));
   });
 
-  let tick = 0, won = false, floors = new Set(), fights = 0, wipes = 0, reloads = 0, steps = 0;
+  let tick = 0, won = false, floors = new Set(), fights = 0, wipes = 0, reloads = 0, steps = 0, tells = 0;
   let lastOutcome = null, fled = 0, fightLog = [], missed = 0, lastSig = '', still = 0, foesWait = 0, frozenFor = 0, wanderFor = 0;
   await page.goto('file://' + HTML);
   await page.waitForTimeout(400);
@@ -371,7 +383,33 @@ async function playRun(browser, n, mode, motion) {
 
   const shot = async (why) => { const f = path.join(OUT, `run${n}-${mode}-${motion}-t${tick}-${why}.png`); await page.screenshot({ path: f }).catch(() => {}); return f; };
 
+  const bossTold = {}, bossTries = {};
+  let bossQueue = null, bossNow = null;
   for (tick = 0; tick < TICKS; tick++) {
+    if (BOSSES) {
+      // the last boss fight is over: move on once it was answered, or after three tries
+      if (bossNow && !(await page.evaluate(() => !!window.cst).catch(() => true))) {
+        if (bossTold[bossNow] > 0 || bossTries[bossNow] >= 3) bossQueue = bossQueue.slice(1);
+        bossNow = null;
+      }
+      const go = bossNow ? { wait: true } : await page.evaluate((q) => {
+        if (__bot.screen() !== 'explore' || !window.party || !party.length || window.cst || sceneDue) return { wait: true };
+        const all = Object.keys(MONSTERS).filter(k => (MONSTERS[k].traits || []).indexOf('boss') >= 0);
+        const left = q || all;
+        if (!left.length) return { done: true, all };
+        party.forEach(c => { c.xp = Math.max(c.xp, XP_TABLE[Math.min(XP_TABLE.length - 1, 6)]);
+          while (canLevel(c)) levelUp(c, actionRng);
+          c.status = []; c.bp = maxBP(c); c.mp = maxMP(c); });
+        startCombat(left[0]);
+        return { started: left[0], left, all };
+      }, bossQueue).catch(() => ({ wait: true }));
+      if (go.done) break;
+      if (go.started) {
+        bossQueue = go.left; bossNow = go.started;
+        bossTries[bossNow] = (bossTries[bossNow] || 0) + 1;
+        go.all.forEach(k => { if (bossTold[k] == null) bossTold[k] = 0; });
+      }
+    }
     const st = await page.evaluate((r) => {
       const d = __bot.decide(r);
       return { d, bad: __bot.check(), sig: __bot.sig(), floor: window.floor && floor.id, inFight: !!window.cst, outcome: window.cst && cst.outcome,
@@ -392,6 +430,8 @@ async function playRun(browser, n, mode, motion) {
 
     // a game that has stopped moving
     if (d.frozen) { if (++frozenFor > 6) { fault('frozen', d.why); await shot('frozen'); break; } } else frozenFor = 0;
+    if (d.tell) tells++;                         // v5.4: a boss wind-up seen and answered
+    if (BOSSES && d.tell && bossNow && ++bossTold[bossNow] === 1) await shot('tell-' + bossNow.replace('mn.', ''));
     if (d.foesTurn) { if (++foesWait > 20) { fault('foes-stuck', 'the enemy\'s turn never ended'); await shot('foes-stuck'); break; } } else foesWait = 0;
     if (d.wandered) { if (++wanderFor > 40) { notes.push('wandered: ran out of places to go on ' + st.floor); break; } } else wanderFor = 0;
     if (st.sig === lastSig && !/^(wait|tap)$/.test(d.do)) { if (++still > 80) { notes.push('the bot went round in circles on ' + st.floor + ' (' + d.why + ')'); break; } } else if (st.sig !== lastSig) still = 0;
@@ -432,7 +472,12 @@ async function playRun(browser, n, mode, motion) {
       if (ok) reloads++;
     }
   }
-  const out = { run: n, seed, mode, motion, ticks: tick, steps, floors: [...floors], fights, wipes, fled, reloads, won, faults, notes, fightLog };
+  if (BOSSES) {
+    notes.push('bosses: ' + Object.keys(bossTold).map(k => k.replace('mn.', '') + ' ' + bossTold[k] + ' in ' + (bossTries[k] || 0)).join(', '));
+    Object.keys(bossTold).forEach(k => { if (!bossTold[k]) fault('no-tell', k + ' never wound up where the bot could see and answer it'); });
+    if (!Object.keys(bossTold).length) fault('no-tell', 'no boss fight was ever started');
+  }
+  const out = { run: n, seed, mode, motion, ticks: tick, steps, floors: [...floors], fights, wipes, fled, reloads, tells, won, faults, notes, fightLog };
   if (faults.length) { out.lastMoves = log.slice(-25); out.shot = await shot('end'); }
   await ctx.close();
   return out;
@@ -489,7 +534,7 @@ async function reloadCheck(page, fault) {
     const r = await playRun(browser, n, mode, motion);
     results.push(r);
     const tagLine = r.faults.length ? 'FAULT ' + r.faults.map(f => f.kind).join(',') : 'clean';
-    console.log(`run ${n} ${mode}/${motion} seed ${r.seed}: ${r.ticks} ticks, ${r.steps} steps, floors ${r.floors.length}, fights ${r.fights}, wipes ${r.wipes}, reloads ${r.reloads}${r.won ? ', WON' : ''} — ${tagLine}${r.notes.length ? ' (' + r.notes.join('; ') + ')' : ''}`);
+    console.log(`run ${n} ${mode}/${motion} seed ${r.seed}: ${r.ticks} ticks, ${r.steps} steps, floors ${r.floors.length}, fights ${r.fights}, wipes ${r.wipes}, reloads ${r.reloads}${r.tells ? ', tells answered ' + r.tells : ''}${r.won ? ', WON' : ''} — ${tagLine}${r.notes.length ? ' (' + r.notes.join('; ') + ')' : ''}`);
     r.faults.forEach(f => console.log(`    ${f.kind} at tick ${f.tick}: ${f.detail}`));
   } };
   await Promise.all(Array.from({ length: Math.max(1, JOBS) }, worker));

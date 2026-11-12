@@ -122,6 +122,22 @@ function choose(party, i, st) {
   const smallFight = !boss && totalFoeBP <= 10;     // not worth the spell points
   st.__acts = (st.__acts || 0) + 1;
 
+  // v5.4: a boss winding up. Stagger it: grit in its eyes, Silence on a
+  // caster, or the biggest spell at it. Everyone else keeps hitting it.
+  const winding = foes.filter(f => f.windup)[0];
+  if (winding && !OFF.includes('tell')) {
+    const hurtSoFar = (winding.windupBP - winding.bp) / winding.bpMax;
+    if (cls === 'rogue' && ready('sk.trick') && !(winding.blinded > 0) && !G.hasTrait(winding, 'construct')) return ['skill:sk.trick', 0];
+    if (cls === 'priest' && G.hasTrait(winding, 'caster') && !(st.silence > 0) && knows('sp.silence')) return ['cast:sp.silence', 0];
+    if (cls === 'mage' && hurtSoFar < 0.3) {
+      if (knows('sp.unmake')) return ['cast:sp.unmake', fi(winding)];
+      if (knows('sp.frost')) return ['cast:sp.frost', fi(winding)];
+    }
+    // Bracing (Defend) cuts the blow to a quarter for that hero, but in the
+    // simulator it cost more than it saved: a round of damage not dealt. The
+    // better answer was to stagger it, so the simulator brace is left out.
+  }
+
   if (cls === 'priest') {
     const down = party.filter(c => c.bp <= 0);
     if (down.length && knows('sp.revive')) return ['cast:sp.revive', pi(down[0])];
