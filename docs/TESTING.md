@@ -266,6 +266,16 @@ Individual runners work too, if you're iterating on one area:
 node tests/harness_combat.js
 ```
 
+### Torchlight (v5.1)
+
+The party carries a torch. Light is bright close by and falls away into the
+dark, the ceiling sits darker than the floor, walls are shadowed where they
+meet the floor and ceiling, and the far wall darkens into its corners. You see
+seven squares down a corridor instead of five, and the dark, not a cut-off,
+ends the view. Embers and holy ground light their own squares and fade over
+the next two. A Light spell carries the torch further. The flame flickers
+gently while you look around; with **Reduced motion** on it holds still.
+
 ### First-run hints (v5.0)
 
 A new player gets a short hint the first time each thing happens: the first

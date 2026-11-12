@@ -110,9 +110,13 @@ function rgbLum(c){
 }
 const toneM2 = src.match(/hexMix\(base \|\| PAL\.stone, PAL\.pitch, ([\d.]+) \+ fog\(fi\) \* ([\d.]+)\)/);
 const T0=+toneM2[1], TK=+toneM2[2];
-const litVigM = src.match(/vg\.addColorStop\(1, currentSight\(\) != null \? 'rgba\(0,0,0,[\d.]+\)' : 'rgba\(0,0,0,([\d.]+)\)'\)/);
+// v5.1: the vignette moved into composeView, and fog follows the torch: bright
+// close by, rolling away with the square of the distance
+const litVigM = src.match(/vg\.addColorStop\(1, dark \? 'rgba\(0,0,0,[\d.]+\)' : 'rgba\(0,0,0,([\d.]+)\)'\)/);
 const LITVIG = +litVigM[1];
-const fogAt = d => Math.min(1, d/(MAXD-1));
+const REACH = +src.match(/var TORCH = \{ reach: ([\d.]+),/)[1];
+const torchI = d => 1 / (1 + (d / REACH) * (d / REACH));
+const fogAt = d => Math.max(0, Math.min(1, (1 - torchI(d)) / (1 - torchI(MAXD - 1))));
 const wallLum = d => {
   let c = rgbMix(vars['--stone'], vars['--pitch'], T0 + fogAt(d)*TK);
   c = c.map(x => Math.round(x*(1-LITVIG)));
@@ -133,9 +137,10 @@ ok('depth still falls off monotonically',
    [0,1,2,3,4].map(d=>wallLum(d).toFixed(3)).join(' '));
 ok('near-to-far contrast is a real gradient', wallLum(0) / wallLum(MAXD-1) >= 2.5,
    (wallLum(0)/wallLum(MAXD-1)).toFixed(1)+'x');
-ok('the lit vignette no longer smothers the periphery', LITVIG <= 0.22, String(LITVIG));
+// v5.1: the torch lets the corners go a little darker than the old lantern
+ok('the lit vignette no longer smothers the periphery', LITVIG <= 0.32, String(LITVIG));
 ok('the vignette starts outside the near field',
-   /createRadialGradient\(cx, cy, Math\.min\(c\.w, c\.h\) \* 0\.4[0-9]/.test(src),
+   /createRadialGradient\(cx, h \* 0\.55, Math\.min\(w, h\) \* 0\.4[0-9] \* f/.test(src),
    'inner radius too small — it dims the nearest walls hardest');
 ok('a lantern pool lights the near floor', /lantern pool/.test(src));
 
@@ -678,6 +683,32 @@ ok('only one element is called roster', (src.match(/id="roster"/g) || []).length
 ok('the fight fills its own list', /var host = document\.getElementById\('cRoster'\);/.test(src) &&
    !/function renderRosterList\(\) \{\s*var host = document\.getElementById\('roster'\)/.test(src));
 ok('the list\'s style is its own', /#cRoster\{flex:1 1 42%;/.test(src) && !/#roster\{flex:1 1 42%;/.test(src));
+
+console.log('\n[L31] torchlight (v5.1)');
+ok('seven squares deep, the dark ends it', MAXD === 7 && SCALE.length >= MAXD + 1, MAXD + ', ' + SCALE.length);
+{
+  const r = +src.match(/var TORCH = \{ reach: ([\d.]+), spell: ([\d.]+) \}/)[1], sp = +src.match(/var TORCH = \{ reach: [\d.]+, spell: ([\d.]+) \}/)[1];
+  const I = (d, R) => 1 / (1 + (d / R) * (d / R));
+  const f = (d, R) => Math.max(0, Math.min(1, (1 - I(d, R)) / (1 - I(MAXD - 1, R))));
+  ok('the torch: full light where you stand, the dark at the edge of sight', f(0, r) === 0 && Math.abs(f(MAXD - 1, r) - 1) < 1e-9);
+  ok('light holds close by, then falls away', f(1, r) < 0.25 && f(3, r) > 0.5, [1, 2, 3, 4].map(d => f(d, r).toFixed(2)).join(' '));
+  ok('a Light spell carries it further', sp > r && f(2, sp) < f(2, r));
+}
+ok('fog() follows the torch, so walls, minis and terrain all do', /function fog\(fi\) \{\s*var edge = 1 - torchI\(MAXD - 1\);/.test(src));
+ok('the ceiling sits darker than the floor', /near, fogN \+ 0\.34, fogF \+ 0\.34\)/.test(src) && /floorTileFor\(floor\), xLn, xRn, bn, xLf, xRf, bf,\s*near, fogN, fogF\)/.test(src));
+ok('walls carry their shadow at floor and ceiling, baked into the texture',
+   /function buildShadedAtlas\(\)/.test(src) && (src.match(/ATLAS_SHADED \|\| ATLAS_TINTED/g) || []).length === 2);
+ok('floors and ceilings keep the plain texture', /g\.drawImage\(ATLAS_TINTED, t\[0\], sy,/.test(src));
+ok('the far wall darkens into its corners', /edgeShade\(g, xLf, tf, xLf, bf, xLf \+ cw9/.test(src) && /edgeShade\(g, xRf, tf, xRf, bf, xRf - cw9/.test(src));
+ok('embers and holy ground light their squares, fading over two more', /var GLOW = \{ embers: \[/.test(src) && /holy: \[/.test(src) &&
+   /var amt = ring === 0 \? 1 : ring === 1 \? 0\.45 : 0\.18;/.test(src));
+ok('the scene is drawn once, the light laid over it', /var VIEW_BASE = null;/.test(src) && /function composeView\(\)/.test(src) &&
+   /g\.drawImage\(VIEW_BASE, 0, 0\);/.test(src));
+ok('the flame flickers, about twelve times a second', /setInterval\(flickerTick, 83\)/.test(src) && /function torchFlicker\(t\)/.test(src));
+ok('but not with reduced motion, in a hidden tab, mid-step, in a fight or under a screen',
+   /if \(reduceMotion\) return 1;/.test(src) &&
+   /if \(reduceMotion \|\| document\.hidden \|\| !party\.length \|\| animating \|\| turning \|\| cst\) return;/.test(src));
+ok('a chest being opened still draws over the light', /if \(LOOT\) drawLoot\(g, w, h\);/.test(src));
 
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);
