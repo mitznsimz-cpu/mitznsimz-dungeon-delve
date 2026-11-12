@@ -11231,8 +11231,11 @@ function renderActions() {
     return t ? label + '  \u2192 ' + t : label;
   };
 
-  mk(withTarget(ranged ? 'Shoot' : 'Attack', 'attack'),
+  // v6.1.4: a melee weapon out of reach says why, instead of just greying out
+  var noReach = !isFront(ch) ? 'Attack \u00b7 too far back' : 'Attack \u00b7 no room to swing';
+  var atkB = mk(reachOK ? withTarget(ranged ? 'Shoot' : 'Attack', 'attack') : noReach,
      function () { doAction('attack'); }, false, !reachOK);
+  if (!reachOK) atkB.title = 'A melee weapon reaches only from the front rank. Step forward (under More on a phone), or carry a sling or bow.';
   mk('Defend', function () { doAction('defend'); });
   var turnKey = cst.round + ':' + i;
   if (turnKey !== ACT_MENU_KEY) { ACT_MENU = null; ACT_MENU_KEY = turnKey; }
