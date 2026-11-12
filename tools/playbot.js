@@ -328,7 +328,7 @@ const PAGE = function () {
       if (!o || typeof o !== 'object') return o;
       if (Array.isArray(o)) return o.map(drop);
       var out = {};
-      Object.keys(o).sort().forEach(function (k) { if (!/^(savedAt|createdAt|updatedAt|playtime|lastSaved)$/.test(k)) out[k] = drop(o[k]); });
+      Object.keys(o).sort().forEach(function (k) { if (!/^(savedAt|createdAt|updatedAt|playtime|playtimeSec|lastSaved)$/.test(k)) out[k] = drop(o[k]); });
       return out;
     };
     return JSON.stringify(drop(s));

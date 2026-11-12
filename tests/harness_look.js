@@ -194,7 +194,8 @@ ok('a light source can be kindled', /out_lightTurns = it\.use\.turns/.test(src))
 
 console.log('\n[L10] turn animation');
 ok('turning is animated', /turning = d; turnT = 0; animating = true/.test(src));
-ok('the view slides during a turn', /var slide = turning/.test(src));
+// v5.2: the old view swings out as the new one swings in
+ok('the view swings during a turn', /g\.drawImage\(TURN_FROM, -sw, 0\);/.test(src) && /g\.drawImage\(VIEW_BASE, cv\.width \* turning - sw, 0\);/.test(src));
 ok('reduced motion skips it', /if \(reduceMotion\) \{ redraw\(\); return; \}[\s\S]{0,80}turning = d/.test(src) ||
    /reduceMotion/.test(src.slice(src.indexOf('function turn('), src.indexOf('function turn(') + 400)));
 
@@ -709,6 +710,22 @@ ok('but not with reduced motion, in a hidden tab, mid-step, in a fight or under 
    /if \(reduceMotion\) return 1;/.test(src) &&
    /if \(reduceMotion \|\| document\.hidden \|\| !party\.length \|\| animating \|\| turning \|\| cst\) return;/.test(src));
 ok('a chest being opened still draws over the light', /if \(LOOT\) drawLoot\(g, w, h\);/.test(src));
+
+console.log('\n[L32] in motion (v5.2)');
+ok('a step glides one square in 150ms, easing to rest', /var STEP_MS = 150, SLIDE_MS = 80, TURN_MS = 170;/.test(src) &&
+   /walkT = sliding \? walkRaw : easeOut\(walkRaw\);/.test(src));
+ok('with a slight dip of the head, never showing an edge', /var dip = Math\.sin\(Math\.PI \* walkRaw\) \* cv\.height \* 0\.007, zm = 1\.014;/.test(src));
+ok('a turn swings the old view out and the new one in', /TURN_FROM\.getContext\('2d'\)\.drawImage\(VIEW_BASE, 0, 0\);/.test(src) &&
+   /turnT = easeInOut\(Math\.min\(1, \(now - t0\) \/ TURN_MS\)\);/.test(src));
+ok('still one square and a quarter turn at a time', /pos\.f = \(pos\.f \+ d \+ 4\) % 4;/.test(src) && /pos\.x \+= FWD\[facing\]\[0\]; pos\.y \+= FWD\[facing\]\[1\];/.test(src));
+ok('a key pressed mid-move is kept and played straight after', /else \{ animating = false; walkRaw = 1; redraw\(\); if \(pendingSlide\) slideOn\(\); else playQueued\(\); \}/.test(src) &&
+   /else \{ animating = false; turning = 0; turnT = 1; redraw\(\); playQueued\(\); \}/.test(src));
+ok('fight figures breathe, each in its own time', /function stageBreath\(key, now\)/.test(src) && /if \(br !== 1\) g\.scale\(2 - br, br\);/.test(src) &&
+   /if \(reduceMotion \|\| STAGE\.playing\) return 1;/.test(src));
+ok('a crit or heavy blow jolts the stage', /STAGE\.quake = \{ t0: t0, dur: 0\.28,/.test(src) && /if \(qk\) \{ g\.save\(\); g\.translate\(qk\.x, qk\.y\); \}/.test(src) && /if \(qk\) g\.restore\(\);/.test(src));
+ok('into a fight with a fade and zoom, back out with a fade', /@keyframes fightIn/.test(src) && /@keyframes viewBack/.test(src) &&
+   /classList\.toggle\('zoom', !reduceMotion\)/.test(src));
+ok('none of it with reduced motion', /if \(reduceMotion\) \{ redraw\(\); if \(pendingSlide\)/.test(src) && /if \(reduceMotion\) \{ redraw\(\); return; \}\s*turning = d;/.test(src));
 
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);

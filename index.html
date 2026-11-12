@@ -533,6 +533,12 @@
     #acts{grid-area:acts;gap:4px}
     #acts button{min-height:34px;font-size:11px;line-height:1.15;padding:3px 4px}
   }
+  /* v5.2: into a fight with a quick fade and zoom; back to the dungeon with a fade */
+  @keyframes fightIn{from{opacity:0;transform:scale(1.035)}to{opacity:1;transform:none}}
+  @keyframes viewBack{from{opacity:.25}to{opacity:1}}
+  #combat.on.zoom{animation:fightIn .22s ease-out}
+  #view.back{animation:viewBack .28s ease-out}
+  @media (prefers-reduced-motion:reduce){#combat.on.zoom,#view.back{animation:none}}
   /* v5.0: first-run hints, one at a time, out of the way of the controls */
   #hint{position:fixed;left:50%;transform:translateX(-50%);top:max(10px,env(safe-area-inset-top));z-index:22;
     width:min(460px,calc(100% - 24px));display:none;background:#1c140d;border:1px solid var(--gold);
@@ -710,7 +716,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v5.1</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v5.2</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -10123,6 +10129,8 @@ function stageApply(result, base) {
     if (c.kind === 'sound') { stageSound(c.name, c.gain, t0 - now); return; }
     if (c.kind === 'hold') {
       if (STAGE.fxm && STAGE.fxm.hold) c.keys.forEach(function (key) { STAGE.fxm.hold(stageSprite(key), t0, c.dur); });
+      // v5.2: the stage itself jolts as the blow lands
+      STAGE.quake = { t0: t0, dur: 0.28, amp: Math.max(3, (STAGE.cell || 60) * 0.06) };
       return;
     }
     if (c.kind === 'anim') {
@@ -10219,6 +10227,30 @@ function stagePlay(actor, action, idx, held, snapA, snapB, snapC) {
   if (first.cues.length || second.cues.length) stageRun();
 }
 
+/* v5.2: figures on the fight stage breathe while nothing is happening: a slow
+   rise and settle, from the feet, each in its own time so the line never moves
+   as one. Still while a turn plays out, and with reduced motion. */
+function stageBreath(key, now) {
+  if (reduceMotion || STAGE.playing) return 1;
+  var h = 0; for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  var period = 2.6 + (h % 9) * 0.12, phase = (h % 97) / 97 * Math.PI * 2;
+  return 1 + 0.012 * Math.sin(now * Math.PI * 2 / period + phase);
+}
+/* v5.2: a crit or a heavy blow shakes the whole stage for a moment. */
+function stageQuake(now) {
+  var q = STAGE.quake;
+  if (!q || reduceMotion) return null;
+  var p = (now - q.t0) / q.dur;
+  if (p < 0 || p > 1) return null;
+  var a = q.amp * (1 - p) * (1 - p);
+  return { x: Math.sin(now * 91) * a, y: Math.cos(now * 77) * a * 0.6 };
+}
+var stageIdleTimer = setInterval(function () {
+  if (!cst || reduceMotion || document.hidden || STAGE.playing || !STAGE.live) return;
+  var cb = document.getElementById('combat');
+  if (cb && cb.classList.contains('on')) drawFoes();
+}, 66);
+
 /* v4.9: the tallest a figure stands in a fight, so a huge monitor does not
    give you figures a foot high. Below this, the stage and the slot decide. */
 var FIGHT_FIGURE_MAX = 260;
@@ -10228,6 +10260,8 @@ function drawFoes() {
   g.clearRect(0, 0, c.w, c.h);
   if (!cst) return;
   var staged = STAGE.live && !!STAGE.fxm, now = stageClock();
+  var qk = staged ? stageQuake(now) : null;
+  if (qk) { g.save(); g.translate(qk.x, qk.y); }
   // v4.9: the motion cell grows with the stage, so a lunge still reaches on a big screen
   if (staged) { STAGE.ctx = g; STAGE.cell = Math.max(24, Math.min(c.h * 0.42, 240)); STAGE.mat = { x: 0, y: 0, w: c.w, h: c.h }; }
 
@@ -10244,6 +10278,8 @@ function drawFoes() {
     g.save();
     g.translate(gx + pv, gy); g.rotate(e.rot); g.translate(-pv, 0);
     if (e.scale !== 1) g.scale(e.scale, e.scale);
+    var br = stageBreath(key, now);
+    if (br !== 1) g.scale(2 - br, br);                // v5.2: rise and settle, from the feet
     stagePose = stagePoseOf(sp, now);
     drawFn(0, 0, e);
     stagePose = null;
@@ -10499,6 +10535,7 @@ function drawFoes() {
   if (foeFrontList.length) g.fillText('THEIR FRONT', c.w * (foeCut + 0.47) / 2, c.h - 6);
   if (pFront.length)       g.fillText('YOUR FRONT',  c.w * (frontX0 + ourCut) / 2, c.h - 6);
   if (pBack.length)        g.fillText('YOUR BACK',   c.w * (ourCut + 0.98) / 2, c.h - 6);
+  if (qk) g.restore();
   g.textAlign = 'left';
 
   // what is flying, and the numbers, over the figures
@@ -10886,6 +10923,7 @@ function startCombat(monsterId, group, opts) {
   }
   selFoe = 0;
   stageReset();
+  document.getElementById('combat').classList.toggle('zoom', !reduceMotion);   // v5.2
   document.getElementById('combat').classList.add('on');
   renderCombat();
   settleFoes();                              // they may have the initiative (v4.9)
@@ -10894,6 +10932,9 @@ function startCombat(monsterId, group, opts) {
 
 function endCombat() {
   var out = cst.outcome;
+  // v5.2: the dungeon fades back in
+  var vw9 = document.getElementById('view');
+  if (vw9 && !reduceMotion) { vw9.classList.remove('back'); void vw9.offsetWidth; vw9.classList.add('back'); }
   party.forEach(releaseHeld);                        // however it ended (v4.9)
   // A recall or a banishment ends the fight AND moves the party; the move
   // happens on the next step, once the combat overlay has closed.
@@ -11909,7 +11950,7 @@ if (!stairCheck.ok) console.error('Stair pairing:', stairCheck.errors);
 
 var pos = { x: floor.entry[0], y: floor.entry[1], f: floor.entryFacing };
 var prev = { x: pos.x, y: pos.y, f: pos.f };
-var walkT = 1, walkDir = 0, animating = false;
+var walkT = 1, walkRaw = 1, walkDir = 0, animating = false;
 
 /* ---------- settings and sound (v4.7) ----------
    Kept in this browser only: sound on or off, its volume, and reduced motion
@@ -13322,8 +13363,7 @@ function drawView() {
 
   g.clearRect(0, 0, c.w, c.h);
 
-  var slide = turning ? (1 - turnT) * c.w * 0.30 * -turning : 0;
-  if (slide) { g.save(); g.translate(slide, 0); }
+  var slide = 0;                       // v5.2: turns swing whole views in composeView
 
   // distant murk behind everything
   var bg = g.createLinearGradient(0, 0, 0, c.h);
@@ -13514,7 +13554,18 @@ function composeView() {
   g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
   g.clearRect(0, 0, cv.width, cv.height);
-  g.drawImage(VIEW_BASE, 0, 0);
+  if (turning && TURN_FROM && TURN_FROM.width === VIEW_BASE.width) {
+    // v5.2: turning right, the old view leaves to the left and the new comes from the right
+    var sw = Math.round(turnT * cv.width) * turning;
+    g.drawImage(TURN_FROM, -sw, 0);
+    g.drawImage(VIEW_BASE, cv.width * turning - sw, 0);
+  } else if (animating && walkDir && !reduceMotion) {
+    // v5.2: a slight dip of the head mid-step, drawn a touch larger so no edge shows
+    var dip = Math.sin(Math.PI * walkRaw) * cv.height * 0.007, zm = 1.014;
+    g.drawImage(VIEW_BASE, -cv.width * (zm - 1) / 2, -cv.height * (zm - 1) / 2 + dip, cv.width * zm, cv.height * zm);
+  } else {
+    g.drawImage(VIEW_BASE, 0, 0);
+  }
   var w = cv.clientWidth || cv.width, h = cv.clientHeight || cv.height;
   g.setTransform(cv.width / Math.max(1, w), 0, 0, cv.height / Math.max(1, h), 0, 0);
   var f = torchFlicker((typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000);
@@ -14897,7 +14948,17 @@ function redraw() {
 }
 
 var pendingSlide = 0;     // v4.8: still sliding on ice, in this direction
+/* v5.2: a move pressed while the last is still playing is kept, the latest
+   one, and played the moment it ends. Holding a key walks on, square by
+   square; a quick tap is never lost. */
+var queuedMove = null;
+function playQueued() { var q = queuedMove; queuedMove = null; if (q && !cst && !sceneDue) q(); }
+var easeOut = function (t) { return 1 - Math.pow(1 - t, 3); };
+var easeInOut = function (t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+var STEP_MS = 150, SLIDE_MS = 80, TURN_MS = 170;
+
 function step(dir, sliding) {
+  if (animating && !sliding && party.length) { queuedMove = function () { step(dir); }; return; }
   if (animating || !party.length || sceneDue) return;
   if (sliding && cst) return;
   var facing = dir > 0 ? pos.f : (pos.f + 2) % 4;
@@ -15101,30 +15162,39 @@ function step(dir, sliding) {
   var slideOn = function () { var d = pendingSlide; pendingSlide = 0; if (d && !cst) step(d, true); };
 
   if (reduceMotion) { redraw(); if (pendingSlide) setTimeout(slideOn, 90); return; }
-  walkDir = dir; walkT = 0; animating = true;
-  var t0 = performance.now();
+  walkDir = dir; walkT = 0; walkRaw = 0; animating = true;
+  var t0 = performance.now(), ms = sliding ? SLIDE_MS : STEP_MS;
   (function frame(now) {
-    walkT = Math.min(1, (now - t0) / (sliding ? 80 : 120));
+    walkRaw = Math.min(1, (now - t0) / ms);
+    walkT = sliding ? walkRaw : easeOut(walkRaw);          // ice slides at an even pace
     drawView();
-    if (walkT < 1) requestAnimationFrame(frame);
-    else { animating = false; redraw(); if (pendingSlide) slideOn(); }
+    if (walkRaw < 1) requestAnimationFrame(frame);
+    else { animating = false; walkRaw = 1; redraw(); if (pendingSlide) slideOn(); else playQueued(); }
   })(t0);
 }
 
 var turning = 0, turnT = 1;
 
+/* v5.2: the view you turn from swings out as the new one swings in. */
+var TURN_FROM = null;
 function turn(d) {
+  if (animating && party.length) { queuedMove = function () { turn(d); }; return; }
   if (animating || !party.length || sceneDue) return;
+  if (!reduceMotion && VIEW_BASE && VIEW_BASE.width) {
+    TURN_FROM = TURN_FROM || document.createElement('canvas');
+    TURN_FROM.width = VIEW_BASE.width; TURN_FROM.height = VIEW_BASE.height;
+    TURN_FROM.getContext('2d').drawImage(VIEW_BASE, 0, 0);
+  }
   pos.f = (pos.f + d + 4) % 4;
   markExplored();
   if (reduceMotion) { redraw(); return; }
   turning = d; turnT = 0; animating = true;
   var t0 = performance.now();
   (function frame(now) {
-    turnT = Math.min(1, (now - t0) / 110);
+    turnT = easeInOut(Math.min(1, (now - t0) / TURN_MS));
     drawView();
-    if (turnT < 1) requestAnimationFrame(frame);
-    else { animating = false; turning = 0; redraw(); }
+    if (now - t0 < TURN_MS) requestAnimationFrame(frame);
+    else { animating = false; turning = 0; turnT = 1; redraw(); playQueued(); }
   })(t0);
 }
 

@@ -266,6 +266,17 @@ Individual runners work too, if you're iterating on one area:
 node tests/harness_combat.js
 ```
 
+### In motion (v5.2)
+
+Moving is still one square and a quarter turn at a time, but each now glides:
+a step takes 150 ms and eases to rest with a slight dip of the head, and a turn
+swings the old view out as the new one swings in. A key pressed while a move is
+still playing is kept and played straight after, so quick taps are never lost
+and holding a key walks on. In a fight, idle figures breathe, each in its own
+time, and a crit or heavy blow jolts the stage. A fight opens with a quick fade
+and zoom, and the dungeon fades back in afterwards. **Reduced motion** turns all
+of this off.
+
 ### Torchlight (v5.1)
 
 The party carries a torch. Light is bright close by and falls away into the

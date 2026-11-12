@@ -545,8 +545,10 @@ ok('every delayed fight and town goes through soon()',
    !/setTimeout\(openTown/.test(src) && !/setTimeout\(function \(\) \{\s*(if \(!cst\) )?startCombat/.test(src) &&
    (src.match(/soon\(/g) || []).length >= 8);
 ok('while one is due, the party cannot step, turn, use, search or rest',
-   /function step\(dir, sliding\) \{\s*if \(animating \|\| !party\.length \|\| sceneDue\) return;/.test(src) &&
-   /function turn\(d\) \{\s*if \(animating \|\| !party\.length \|\| sceneDue\) return;/.test(src) &&
+   // v5.2: a move pressed mid-step is queued first; the queue only plays when nothing is due
+   /function step\(dir, sliding\) \{\s*if \(animating && !sliding && party\.length\) \{ queuedMove = [^\n]*\n\s*if \(animating \|\| !party\.length \|\| sceneDue\) return;/.test(src) &&
+   /function turn\(d\) \{\s*if \(animating && party\.length\) \{ queuedMove = [^\n]*\n\s*if \(animating \|\| !party\.length \|\| sceneDue\) return;/.test(src) &&
+   /function playQueued\(\) \{ var q = queuedMove; queuedMove = null; if \(q && !cst && !sceneDue\) q\(\); \}/.test(src) &&
    /function interactHere\(\) \{\s*if \(!party\.length \|\| animating \|\| cst \|\| sceneDue\) return;/.test(src) &&
    /function doSearch\(\) \{\s*if \(!party\.length \|\| animating \|\| cst \|\| sceneDue\) return;/.test(src) &&
    /function campRest\(\) \{\s*if \(sceneDue\) return false;/.test(src));
