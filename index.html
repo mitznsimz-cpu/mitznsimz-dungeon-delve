@@ -567,8 +567,9 @@
     #acts.folded > button.fold small{color:var(--text-dim);font-size:9px}
     #acts.folded > button.fold span{color:var(--gold);font-size:9px}
     #acts.folded > button.fold.open{border-color:var(--gold);color:var(--gold)}
-    #actMenu{position:fixed;left:12px;right:12px;z-index:30;background:var(--ink);border:1px solid var(--gold);
-      box-shadow:0 -12px 40px rgba(0,0,0,.85);padding:8px;display:grid;gap:6px;max-height:58vh;overflow-y:auto;
+    #acts{position:relative}
+    #actMenu{position:absolute;left:0;right:0;bottom:calc(100% + 6px);z-index:30;background:var(--ink);border:1px solid var(--gold);
+      box-shadow:0 -12px 40px rgba(0,0,0,.85);padding:8px;display:grid;gap:6px;max-height:min(58vh,60svh);overflow-y:auto;
       overscroll-behavior:contain}
     #actMenu .amHead{font:10px/1.4 ui-monospace,Menlo,monospace;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;padding:0 2px 2px}
     #actMenu button{min-height:42px;text-align:left;padding:6px 10px}
@@ -11289,11 +11290,36 @@ function foldActions(host, groups, ch) {
   var x = document.createElement('button'); x.className = 'amClose'; x.textContent = 'Close';
   x.addEventListener('click', function () { ACT_MENU = null; renderActions(); });
   m.appendChild(x);
-  host.appendChild(m);
-  // it opens upwards from the buttons, over the log and the stage
-  var r = host.getBoundingClientRect();
-  m.style.bottom = Math.max(8, window.innerHeight - r.top + 6) + 'px';
+  host.appendChild(m);                              // it opens upwards from the buttons (CSS)
 }
+function closeActMenu() {
+  if (!ACT_MENU) return false;
+  ACT_MENU = null;
+  if (cst) renderActions();
+  return true;
+}
+/* v6.1.4: a tap anywhere outside an open menu closes it (and does nothing else),
+   as does Escape. Turning the phone closes it and lays the buttons out afresh. */
+document.addEventListener('pointerdown', function (e) {
+  if (!ACT_MENU) return;
+  var m = document.getElementById('actMenu');
+  if (m && m.contains(e.target)) return;
+  if (e.target.closest && e.target.closest('#acts button.fold')) return;   // its own button toggles it
+  closeActMenu();
+  swallowClick = Date.now();
+  e.preventDefault(); e.stopPropagation();
+}, true);
+var swallowClick = 0;                               // the click that follows that tap does nothing
+document.addEventListener('click', function (e) {
+  if (swallowClick && Date.now() - swallowClick < 700) { swallowClick = 0; e.preventDefault(); e.stopPropagation(); }
+}, true);
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && closeActMenu()) e.preventDefault(); });
+function relayFight() { ACT_MENU = null; if (cst) renderActions(); }
+(function () {
+  var mq = typeof matchMedia === 'function' ? matchMedia('(max-width:599px) and (orientation:portrait)') : null;
+  if (mq) (mq.addEventListener ? mq.addEventListener('change', relayFight) : mq.addListener(relayFight));
+  window.addEventListener('orientationchange', relayFight);
+})();
 
 function combatCanvasPick(e) {
   if (stageSkip()) return;
