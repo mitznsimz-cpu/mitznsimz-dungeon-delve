@@ -19,7 +19,7 @@ const BOOT = grab('BUNDLED PACK') + grab('MINI CORE') + grab('PACK CORE') +
 
 const names = ['HABITATS', 'HABITAT_NAMES', 'MONSTER_TRAITS', 'monsterHabitats', 'livesIn', 'habitatTable',
   'habitatAt', 'encounterTableAt', 'pickEncounter', 'validatePack', 'packFloor', 'PACK', 'MONSTERS', 'BUNDLED_PACK',
-  'GEN_THEMES', 'GEN_VERSION', 'themeFor', 'genTable', 'deepTable', 'generateDelve', 'extendDelve', 'delvePrint',
+  'GEN_THEMES', 'GEN_VERSION', 'themeFor', 'genTable','GEN_LEVEL_LAG','GEN_LAG_FROM', 'deepTable', 'generateDelve', 'extendDelve', 'delvePrint',
   'makeRng', 'makeParty', 'grantStartingSpells', 'startingKit', 'maxBP', 'makeEncounter', 'beginCombat',
   'oneFoeAttack', 'spawnerTurn', 'groundElementMult', 'combatGround', 'TERRAIN', 'TERRAIN_ELEMENTS',
   'damageEquipment', 'stageTurn', 'miniKnown', 'MitzMinis', 'livingFoes', 'setMonsterScale', 'GEN_DRESSING_TYPES', 'GEN_DRESSING_TERRAIN'];
@@ -225,7 +225,10 @@ console.log('\n[B6] generated floors by theme');
   Object.keys(M).forEach(id => { (byLevel[M[id].level] = byLevel[M[id].level] || []).push(id); });
   const weak = [], themedCount = [], bossy = [];
   for (let d = 1; d <= 24; d++) {
-    const t = T.genTable(M, byLevel, d), plain = T.deepTable(byLevel, d, Object.keys(M));
+    // v5.0: past floor 3 a floor draws a level below its depth on purpose; the
+    // plain band to compare against is that eased one
+    const bandD = d >= T.GEN_LAG_FROM ? Math.max(1, d - T.GEN_LEVEL_LAG) : d;
+    const t = T.genTable(M, byLevel, d), plain = T.deepTable(byLevel, bandD, Object.keys(M));
     const habs = T.themeFor(d).habitats;
     if (t.every(id => T.livesIn(M[id], habs))) themedCount.push(d);
     if (t.join() !== plain.join() && t.filter(id => !isBoss(id)).length < 2) bossy.push(d);
@@ -412,6 +415,31 @@ console.log('\n[B8] the app passes where the party stands');
   ok('encounterHere gives the position and the bestiary',
      /function encounterHere\(\) \{ return \{ x: pos\.x, y: pos\.y, monsters: MONSTERS \}; \}/.test(src));
   ok('the floor\'s habitat survives packFloor', /habitat: f\.habitat \|\| null/.test(src));
+}
+
+console.log('\n[B9] the delve eases past floor 3 (v5.0)');
+{
+  const M = T.MONSTERS || MON, byLevel = {};
+  Object.keys(M).forEach(id => { (byLevel[M[id].level] = byLevel[M[id].level] || []).push(id); });
+  const avg = d => { const t = T.genTable(M, byLevel, d); return t.reduce((a, id) => a + M[id].level, 0) / t.length; };
+  ok('from floor 4 a floor draws its monsters a level below its depth', T.GEN_LEVEL_LAG === 1 && T.GEN_LAG_FROM === 4);
+  ok('floor 5 now draws what floor 4 drew before', avg(5) < avg(6) && avg(5) <= 5, avg(5).toFixed(2) + ', floor 6 ' + avg(6).toFixed(2));
+  // the big groups that stalled every party without a Wizard (v5.0)
+  const most = id => { const g = M[id].groupSize; return g[0] * g[1] + g[2]; };
+  ok('deep leeches come 3 to 6, not 5 to 20', most('mn.deepLeech') === 6 && M['mn.deepLeech'].groupSize[0] + M['mn.deepLeech'].groupSize[2] === 3);
+  ok('wolves, orc raiders, brigands and kobolds come 2 to 5', ['mn.direWolf', 'mn.orcRaider', 'mn.brigand', 'mn.kobold'].every(id => most(id) === 5));
+  ok('no ordinary monster comes more than 7 at a time', Object.keys(M).every(id => !M[id].groupSize || most(id) <= 7),
+     Object.keys(M).filter(id => M[id].groupSize && most(id) > 7).join());
+  const fl = id => T.BUNDLED_PACK.floors.find(f => f.id === id).features;
+  ok('Ashkeld\'s placed hounds, warden and knights meet you in exact numbers',
+     JSON.stringify(fl('f2')['6,7'].group) === '[{"ref":"mn.warrenHound","count":2}]' &&
+     JSON.stringify(fl('f3')['9,2'].group) === '[{"ref":"mn.cryptWarden","count":1}]' &&
+     JSON.stringify(fl('f3')['3,7'].group) === '[{"ref":"mn.boneKnight","count":2}]');
+  ok('the pack file says the same as the game', JSON.stringify(JSON.parse(require('fs').readFileSync('./packs/msdd_pack_ashkeld.json', 'utf8'))) === JSON.stringify(T.BUNDLED_PACK));
+  ok('Suggest a party rolls a fair Constitution', /var QUICK_MIN_CON = 10;/.test(src) &&
+     /\(slots\[i\]\.stats\.con \|\| 0\) < QUICK_MIN_CON\) && guard\+\+ < 200\) rerollSlot\(i\);/.test(src));
+  ok('the theme stays the real floor\'s', [4, 5, 6, 7].every(d => { const t = T.genTable(M, byLevel, d);
+    return t.every(id => T.livesIn(M[id], T.themeFor(d).habitats)) || t.join() === T.deepTable(byLevel, d - 1, Object.keys(M)).join(); }));
 }
 
 console.log('\n' + (fail ? 'FAILED' : 'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed');

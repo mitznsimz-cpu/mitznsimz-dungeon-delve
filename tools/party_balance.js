@@ -36,10 +36,9 @@ const G = new Function(grab('BUNDLED PACK') + grab('PACK CORE') +
 
 /* What-ifs for the balance pass: BALANCE_PATCH=leech,... changes the bestiary
    in memory before the runs. Nothing is written back. */
-const PATCHES = {
-  leech: () => { G.MONSTERS['mn.deepLeech'].groupSize = [1, 4, 2]; },          // 3-6, was 3d6+2 (5-20)
-  packs: () => { ['mn.direWolf', 'mn.orcRaider', 'mn.brigand', 'mn.kobold'].forEach(r => { G.MONSTERS[r].groupSize = [1, 4, 1]; }); }   // 2-5, was 3-9
-};
+// The v4.9 what-ifs (leeches 3-6, wolves and raiders 2-5) went into the game in
+// v5.0, so they are gone from here. Add a new one in the same shape to try it.
+const PATCHES = {};
 (process.env.BALANCE_PATCH || '').split(',').filter(Boolean).forEach(k => { if (!PATCHES[k]) throw new Error('no patch ' + k); PATCHES[k](); });
 
 /* ---------------- the party ---------------- */

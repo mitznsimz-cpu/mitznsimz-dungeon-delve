@@ -2,7 +2,7 @@
   "packFormat": 1,
   "id": "msdd.core.tapro",
   "name": "The Ruined Tower of Ashkeld",
-  "version": "4.9.0",
+  "version": "5.0.0",
   "author": "MitzNSimz",
   "engineMin": "1.6.0",
   "rules": {
@@ -2287,7 +2287,7 @@
         2
       ],
       "groupSize": [
-        2,
+        1,
         4,
         1
       ],
@@ -2376,8 +2376,8 @@
         1
       ],
       "groupSize": [
-        3,
-        6,
+        1,
+        4,
         2
       ],
       "art": "amorphous",
@@ -2420,7 +2420,7 @@
         4
       ],
       "groupSize": [
-        2,
+        1,
         4,
         1
       ],
@@ -2558,7 +2558,7 @@
         4
       ],
       "groupSize": [
-        2,
+        1,
         4,
         1
       ],
@@ -2688,7 +2688,7 @@
         6
       ],
       "groupSize": [
-        2,
+        1,
         4,
         1
       ],
@@ -5267,7 +5267,13 @@
         },
         "6,7": {
           "type": "monster",
-          "ref": "mn.warrenHound"
+          "ref": "mn.warrenHound",
+          "group": [
+            {
+              "ref": "mn.warrenHound",
+              "count": 2
+            }
+          ]
         },
         "4,8": {
           "type": "chest",
@@ -5651,7 +5657,13 @@
         },
         "9,2": {
           "type": "monster",
-          "ref": "mn.cryptWarden"
+          "ref": "mn.cryptWarden",
+          "group": [
+            {
+              "ref": "mn.cryptWarden",
+              "count": 1
+            }
+          ]
         },
         "6,6": {
           "type": "door",
@@ -5662,7 +5674,13 @@
         },
         "3,7": {
           "type": "monster",
-          "ref": "mn.boneKnight"
+          "ref": "mn.boneKnight",
+          "group": [
+            {
+              "ref": "mn.boneKnight",
+              "count": 2
+            }
+          ]
         },
         "2,8": {
           "type": "chest",
