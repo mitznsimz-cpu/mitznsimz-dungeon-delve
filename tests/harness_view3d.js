@@ -54,7 +54,7 @@ console.log('\n[V2] the floors of Ashkeld, built');
     const ups = Object.keys(f.features).filter(k => f.features[k].type === 'stairsUp').length;
     const downs = Object.keys(f.features).filter(k => f.features[k].type === 'stairsDown').length;
     ok(f.id + ': a ceiling over every open square but the stairs up', tris(P, 'ceil') === (open - ups) * 2, tris(P, 'ceil') + ' vs ' + (open - ups) * 2);
-    ok(f.id + ': each stair opens a shaft of four stone sides, and has its steps', tris(P, 'pit') >= (ups + downs) * 8 && P.stairs.length === ups + downs && P.stairs.every(st => st.geo.count() / 3 >= 6 * 10), tris(P, 'pit'));
+    ok(f.id + ': each stair opens a shaft of four stone sides, and has its steps', tris(P, 'pit') >= (ups + downs) * 8 && P.stairs.length === ups + downs && P.stairs.every(st => st.geo.count() / 3 >= 7 * 10), tris(P, 'pit'));
     ok(f.id + ': a floor under every square without a hole in it', floorTris + P.geo.recess.count() / 3 >= open * 2 - 2 * 20 && floorTris <= open * 2, floorTris);
     ok(f.id + ': a wall on every walled edge (and no more than its trimmings)', tris(P, 'wall') >= edges * 2, tris(P, 'wall') + ' vs ' + edges * 2);
     const doors = Object.keys(f.features).filter(k => /^(door|secretDoor)$/.test(f.features[k].type)).length;

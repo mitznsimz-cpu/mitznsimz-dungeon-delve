@@ -342,12 +342,12 @@
     } else if (t === 'stairsDown' || t === 'stairsUp') {
       var dirIn = walls.length === 3 ? [0, 1, 2, 3].filter(function (q) { return walls.indexOf(q) < 0; })[0] : (ns ? 2 : 1);
       var fx = -FWD[dirIn][0], fz = -FWD[dirIn][1], up = t === 'stairsUp';   // the steps run away from the way in
-      var n = up ? 6 : 7, sg = new Geo();
+      var n = up ? 10 : 7, sg = new Geo();                                        // up: ten shallow steps, a tenth of the way each
       for (var s2 = 0; s2 < n; s2++) {
         // up: rising away from the way in. down: dropping toward it, so you look onto the treads, not behind the rim
         var at = up ? s2 : n - 1 - s2;
         var cx = x + fx * (-0.5 + (at + 0.5) / n), cz = y + fz * (-0.5 + (at + 0.5) / n);
-        var top = up ? (s2 + 1) * 0.2 : -(s2 + 1) * 0.1 + 0.02, bot = up ? 0 : -1.3;
+        var top = up ? (s2 + 1) * 0.1 : -(s2 + 1) * 0.1 + 0.02, bot = up ? 0 : -1.3;
         sg.box(cx, (top + bot) / 2, cz, fx ? 1 / n : 0.98, top - bot, fz ? 1 / n : 0.98);
       }
       if (!up) {                                                                    // a low kerb round the well, but not on the way in
