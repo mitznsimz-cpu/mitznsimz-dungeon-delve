@@ -5741,6 +5741,23 @@ function partyActionInner(party, st, action, targetIdx, rng, i) {
 
 /* --- foe turns --- */
 /* Something that keeps calling for help until it is put down. */
+/* v5.0: a foe that joins a fight (split off, called up, raised) gets the next
+   free letter among its own kind, so no two answer to the same name. A split
+   rot grub used to copy its parent's name whole: three "Rot Grub F" in the
+   list, and no telling which one a tap would pick. A lone foe that gains kin
+   takes the letter A. */
+function letterFoe(st, nf) {
+  var base = function (n) { return n.replace(/ [A-Z]$/, ''); };
+  var b = base(nf.name);
+  var kin = st.foes.filter(function (f) { return f !== nf && f.ref === nf.ref && base(f.name) === b; });
+  if (!kin.length) { nf.name = b; return; }
+  var used = {};
+  kin.forEach(function (f) { var m = / ([A-Z])$/.exec(f.name); if (m) used[m[1]] = 1; });
+  var free = function () { for (var c = 65; c < 91; c++) if (!used[String.fromCharCode(c)]) return String.fromCharCode(c); return '?'; };
+  kin.forEach(function (f) { if (!/ [A-Z]$/.test(f.name)) { var c = free(); f.name = b + ' ' + c; used[c] = 1; } });
+  nf.name = b + ' ' + free();
+}
+
 function spawnerTurn(st, rng) {
   var ev = [];
   livingFoes(st).forEach(function (f) {
@@ -5761,6 +5778,7 @@ function spawnerTurn(st, rng) {
       var sc = typeof currentMonsterScale === 'function' ? currentMonsterScale() : 1;
       if (sc > 1) scaleFoe(raised, sc);
       st.foes.push(raised);
+      letterFoe(st, raised);
       ev.push({ kind: 'foehit', text: f.name + ' calls, and a ' + kin.name.toLowerCase() + ' rises to answer.' });
       return;
     }
@@ -5770,6 +5788,7 @@ function spawnerTurn(st, rng) {
     copy.traits = copy.traits.filter(function (t) { return t !== 'spawner'; });
     copy.xp = Math.round(f.xp * 0.4);
     st.foes.push(copy);
+    letterFoe(st, copy);
     ev.push({ kind: 'foehit', text: f.name + ' calls, and something answers.' });
   });
   return ev;
@@ -6004,9 +6023,9 @@ function oneFoeAttack(party, st, foe, atk, rng, ev) {
         foe.bp = half; foe.bpMax = half;
         var spawn = JSON.parse(JSON.stringify(foe));
         spawn.uid = 'sp' + st.foes.length;
-        spawn.name = foe.name;
         st.foes.push(spawn);
-        ev.push({ kind: 'foehit', text: foe.name + ' splits apart.' });
+        letterFoe(st, spawn);
+        ev.push({ kind: 'foehit', text: foe.name + ' splits apart: ' + spawn.name + '.' });
       }
       if (hasTrait(foe, 'banish') && ch.bp > 0 && rng() < 0.045) {
         st.banished = true;
@@ -7018,7 +7037,7 @@ function returnToTown(why) {
   markExplored();
   redraw();
   autosave();
-  setTimeout(openTown, 300);
+  soon(openTown, 300);
 }
 
 /* The mouth of the dungeon: floor one's entry, and the way back to town. */
@@ -9589,7 +9608,7 @@ function renderTown() {
 }
 
 function openTown() {
-  if (!party.length) return;
+  if (!party.length || cst) return;          // not over a fight (v5.0)
   document.getElementById('townTitle').textContent = (PACK.town || {}).name || 'Town';
   document.querySelectorAll('.tabs button').forEach(function (b) {
     var k = (PACK.town || {})[b.dataset.tab] || {};
@@ -9850,7 +9869,7 @@ function closeEvent() {
   evtState = null;
   if (jump) { changeFloor(jump, pos.f); return; }
   redraw();
-  if (fight) setTimeout(function () { if (!cst) startCombat(fight.ref, fight.count ? [{ ref: fight.ref, count: fight.count }] : null); }, 350);
+  if (fight) soon(function () { if (!cst) startCombat(fight.ref, fight.count ? [{ ref: fight.ref, count: fight.count }] : null); }, 350);
 }
 
 /* ---------- what the party sees ---------- */
@@ -10818,8 +10837,20 @@ function doAction(action) {
   settleFoes();                              // a new round may open with the enemy (v4.9)
 }
 
+/* v5.0: a fight or the town that is about to open (a beat after the step that
+   brought it) holds the party still until it does. Without this a player who
+   kept walking could start a second thing on top: the play bot walked off the
+   way home in that beat, a wandering fight began, and the town opened over it,
+   with its temple open mid-fight. */
+var sceneDue = 0;
+function soon(fn, ms) {
+  sceneDue++;
+  setTimeout(function () { sceneDue = Math.max(0, sceneDue - 1); fn(); }, ms);
+}
+
 function startCombat(monsterId, group, opts) {
   opts = opts || {};
+  if (cst) return;                           // never a second fight over the first (v5.0)
   var foes = group ? makeGroup(group, actionRng) : makeEncounter(monsterId, actionRng);
   if (!foes.length) return;
   if (opts.noAmbush) foes.forEach(function (f) { f.traits = (f.traits || []).filter(function (t) { return t !== 'ambush'; }); });
@@ -12047,7 +12078,7 @@ function springHere(ft, kind, key) {
   if (res.alarm) {
     threat = 0;
     redraw();
-    setTimeout(function () { if (!cst) startCombat(pickEncounter(floor, actionRng, encounterHere())); }, 600);
+    soon(function () { if (!cst) startCombat(pickEncounter(floor, actionRng, encounterHere())); }, 600);
     return res;
   }
   return res;
@@ -12256,6 +12287,7 @@ function encounterHere() { return { x: pos.x, y: pos.y, monsters: MONSTERS }; }
    gold): Mitz's Rest button made camp in town instead, charged nothing,
    and then failed on the reply it expected. */
 function campRest() {
+  if (sceneDue) return false;
   var chk = canRest();
   if (!chk.ok) { say(chk.why); return false; }
 
@@ -12267,7 +12299,7 @@ function campRest() {
     say('You bed down. Something finds you before you are warm.', null, 'bad');
     sfx('horn', 0.6);
     renderParty(); redraw();
-    setTimeout(function () { startCombat(pickEncounter(floor, actionRng, encounterHere())); }, 400);
+    soon(function () { startCombat(pickEncounter(floor, actionRng, encounterHere())); }, 400);
     return true;
   }
 
@@ -12334,7 +12366,7 @@ function clearAhead() {
   redraw();
   if (r.ambush) {
     say('Something in the webs was not finished with them.', null, 'bad');
-    setTimeout(function () { startCombat(r.ambush); }, 500);
+    soon(function () { startCombat(r.ambush); }, 500);
   }
   return true;
 }
@@ -14642,7 +14674,7 @@ function redraw() {
 
 var pendingSlide = 0;     // v4.8: still sliding on ice, in this direction
 function step(dir, sliding) {
-  if (animating || !party.length) return;
+  if (animating || !party.length || sceneDue) return;
   if (sliding && cst) return;
   var facing = dir > 0 ? pos.f : (pos.f + 2) % 4;
   var under = floor.features[pos.x + ',' + pos.y];
@@ -14819,14 +14851,14 @@ function step(dir, sliding) {
   if (pendingRecall) { pendingRecall = false; returnToTown('The word takes hold.'); return; }
   if (isExitCell(floor, pos.x, pos.y)) {
     redraw();
-    setTimeout(openTown, 250);
+    soon(openTown, 250);
     return;
   }
 
   if (feat && feat.type === 'monster' && consumed.indexOf(pos.x + ',' + pos.y) < 0) {
     consumed.push(pos.x + ',' + pos.y);
     redraw();
-    setTimeout(function () {
+    soon(function () {
       startCombat(feat && feat.ref ? feat.ref : pickEncounter(floor, actionRng, encounterHere()),
                   feat && feat.group);
     }, 500);
@@ -14835,7 +14867,7 @@ function step(dir, sliding) {
   if (threatTriggers(threat, actionRng, RULES.threat)) {
     threat = 0;
     redraw();
-    setTimeout(function () { startCombat(feat && feat.ref ? feat.ref : pickEncounter(floor, actionRng, encounterHere())); }, 400);
+    soon(function () { startCombat(feat && feat.ref ? feat.ref : pickEncounter(floor, actionRng, encounterHere())); }, 400);
     return;
   }
 
@@ -14857,7 +14889,7 @@ function step(dir, sliding) {
 var turning = 0, turnT = 1;
 
 function turn(d) {
-  if (animating || !party.length) return;
+  if (animating || !party.length || sceneDue) return;
   pos.f = (pos.f + d + 4) % 4;
   markExplored();
   if (reduceMotion) { redraw(); return; }
@@ -14874,7 +14906,7 @@ function turn(d) {
 
 /* You stand on a thing, you are told what it is, and you decide. */
 function interactHere() {
-  if (!party.length || animating || cst) return;
+  if (!party.length || animating || cst || sceneDue) return;
   var key = pos.x + ',' + pos.y;
   var feat = floor.features[key];
   var what = interactable(feat, pos.x, pos.y);
@@ -14939,7 +14971,7 @@ function interactHere() {
 }
 
 function doSearch() {
-  if (!party.length || animating) return;
+  if (!party.length || animating || cst || sceneDue) return;
   var r = searchHere(party, floor, world, pos.x, pos.y, actionRng);
   say(r.notes.join(' '));
   if (r.found && r.found.length) sfx('chime', 0.7);

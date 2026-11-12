@@ -17,7 +17,7 @@ const names = ['isFront','frontRank','backRank','foeFront','foeBack','meleeTarge
   'beginCombat','partyAction','foeTurns','advanceCombat','finishCombat','activeActor','livingFoes',
   'attackRoll','reviveAfterWipe','threatTriggers','describeFoes','foesBlockLine','makeGroup','setMonsterScale','currentMonsterScale','scaleFoe','scaleGroupSize','wasStruck','advanceCombat','activeActor','normalisePositions','startingKit','grantStartingSpells',
   'makeRng','makeParty','makeCharacter','maxBP','maxMP','partyDown','applyDamage','canLevel','levelUp',
-  'oneFoeTurn','attacksThisTurn','makeItem','useItem','anyTargets'];
+  'oneFoeTurn','attacksThisTurn','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
 const C = new Function(BOOT + grab('PARTY CORE') + '\n' + grab('SAVE CORE') + '\n' + grab('WORLD CORE') + '\n' + grab('EVENT CORE') + '\n' + grab('COMBAT CORE') + '\n' + grab('TOWN CORE') + '\n' + grab('INVENTORY CORE') +
   '\nreturn {' + names.join(',') + '};')();
 
@@ -494,6 +494,64 @@ ok('when a fight starts', /renderCombat\(\);\s*settleFoes\(\);\s*\/\/ they may h
 ok('after each action', /renderCombat\(\);\s*settleFoes\(\);\s*\/\/ a new round may open with the enemy/.test(src));
 ok('and once a turn has finished playing out', /renderActions\(\);\s*settleFoes\(\);\s*\/\/ and if the enemy is up next/.test(src));
 ok('but never while a turn is still playing', /function settleFoes\(\) \{\s*if \(STAGE\.playing\) return;/.test(src));
+
+console.log('\n[C13] a foe that joins a fight has a name of its own (v5.0)');
+// The play bot found three "Rot Grub F" in one fight: a split copied its
+// parent's name whole, so the list and the stage could not tell them apart.
+(() => {
+  const st = { foes: [{ ref: 'mn.x', name: 'Grub A' }, { ref: 'mn.x', name: 'Grub B' }] };
+  const a = { ref: 'mn.x', name: 'Grub B' }; st.foes.push(a); C.letterFoe(st, a);
+  const b = { ref: 'mn.x', name: 'Grub A' }; st.foes.push(b); C.letterFoe(st, b);
+  ok('a split takes the next free letter', a.name === 'Grub C' && b.name === 'Grub D', a.name + ', ' + b.name);
+  const lone = { foes: [{ ref: 'mn.y', name: 'Ghoul' }] }, c = { ref: 'mn.y', name: 'Ghoul' };
+  lone.foes.push(c); C.letterFoe(lone, c);
+  ok('a lone foe that gains kin becomes A, the newcomer B', lone.foes[0].name === 'Ghoul A' && c.name === 'Ghoul B', lone.foes.map(f => f.name).join(', '));
+  const other = { foes: [{ ref: 'mn.z', name: 'Skeleton A' }] }, d = { ref: 'mn.w', name: 'Zombie' };
+  other.foes.push(d); C.letterFoe(other, d);
+  ok('a different kind keeps its plain name', d.name === 'Zombie');
+  const boss = { foes: [{ ref: 'mn.s', name: 'The Shade of Ashkeld' }] }, e = { ref: 'mn.t', name: 'Shade Wisp' };
+  boss.foes.push(e); C.letterFoe(boss, e);
+  ok('a named foe is never lettered by mistake', boss.foes[0].name === 'The Shade of Ashkeld');
+})();
+// every fight in 400 seeded ones, with splitters and spawners in them: no two living foes share a name
+(() => {
+  const splitters = Object.keys(C.MONSTERS).filter(k => (C.MONSTERS[k].traits || []).some(t => t === 'split' || t === 'spawner'));
+  let dup = 0, joined = 0, checked = 0;
+  for (let s = 0; s < 400 && splitters.length; s++) {
+    const rg = C.makeRng(7000 + s), p = freshParty(7000 + s);
+    const st = C.beginCombat(p, C.makeGroup([{ ref: splitters[s % splitters.length], count: 3 }], rg), rg);
+    const n0 = st.foes.length;
+    let g = 0;
+    while (!st.outcome && g++ < 40) {
+      const i = C.activeActor(st);
+      if (i !== null) C.partyAction(p, st, 'attack', 0, rg);
+      C.advanceCombat(p, st, rg);
+      const names = st.foes.map(f => f.name);
+      if (new Set(names).size !== names.length) { dup++; break; }
+    }
+    joined += st.foes.length - n0; checked++;
+  }
+  ok('foes joined fights in the sample', joined > 20, joined + ' joined over ' + checked + ' fights');
+  ok('and no two in a fight ever shared a name', dup === 0, dup + ' fights with a repeat');
+})();
+ok('splits, callers and the raised are all lettered',
+   (src.match(/letterFoe\(st, (spawn|copy|raised)\);/g) || []).length === 3);
+
+console.log('\n[C14] nothing starts on top of a fight or the town (v5.0)');
+// A fight and the town each open a beat after the step that brings them. The
+// play bot kept walking in that beat, a wandering fight began, and the town
+// opened over it with its temple usable mid-fight.
+ok('every delayed fight and town goes through soon()',
+   !/setTimeout\(openTown/.test(src) && !/setTimeout\(function \(\) \{\s*(if \(!cst\) )?startCombat/.test(src) &&
+   (src.match(/soon\(/g) || []).length >= 8);
+ok('while one is due, the party cannot step, turn, use, search or rest',
+   /function step\(dir, sliding\) \{\s*if \(animating \|\| !party\.length \|\| sceneDue\) return;/.test(src) &&
+   /function turn\(d\) \{\s*if \(animating \|\| !party\.length \|\| sceneDue\) return;/.test(src) &&
+   /function interactHere\(\) \{\s*if \(!party\.length \|\| animating \|\| cst \|\| sceneDue\) return;/.test(src) &&
+   /function doSearch\(\) \{\s*if \(!party\.length \|\| animating \|\| cst \|\| sceneDue\) return;/.test(src) &&
+   /function campRest\(\) \{\s*if \(sceneDue\) return false;/.test(src));
+ok('a second fight never replaces the first', /if \(cst\) return;\s*\/\/ never a second fight over the first/.test(src));
+ok('the town never opens over a fight', /function openTown\(\) \{\s*if \(!party\.length \|\| cst\) return;/.test(src));
 
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);

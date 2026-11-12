@@ -266,6 +266,32 @@ Individual runners work too, if you're iterating on one area:
 node tests/harness_combat.js
 ```
 
+### The play bot (v5.0)
+
+The runners test the rules directly. The play bot plays whole runs through the
+real screen instead, pressing keys and clicking buttons as a player does: it
+picks an adventure, makes a party with **Suggest a party**, explores, fights,
+opens chests, answers events, rests, uses the temple, takes the stairs, and
+wakes after a wipe. Every 300 moves it saves, reloads the page, continues the
+saved game and checks the game came back the same.
+
+```sh
+npm install playwright
+node tools/playbot.js index.html --runs 20 --jobs 4
+```
+
+It reports a fault when the game is at fault: an error on the page, a screen
+with nothing to press, a fight stuck on the enemy's turn, a BP, MP, gold or XP
+that isn't a sane number, the fight screen out of step with the fight, or a
+game that comes back different after a reload. Each run's seed is printed, so
+a failing run can be played again exactly. Screenshots and `report.json` go in
+`playbot-out/`.
+
+Its first runs found two bugs the runners never could: a fight could start
+while the town was opening (the town then sat over the fight, with its temple
+usable mid-fight), and a split or summoned foe copied its parent's name, so
+three "Rot Grub F" could stand in one fight.
+
 ---
 
 ## How the harnesses stay honest
