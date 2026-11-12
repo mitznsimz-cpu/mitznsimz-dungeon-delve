@@ -13,6 +13,7 @@ Or download the repo and double-click `index.html`. It plays offline once loaded
 - **Four classes:** Fighter, Wizard, Priest and Rogue. Make your own party, or start with a ready-made one.
 - **The Ruined Tower of Ashkeld:** a hand-made adventure over three floors.
 - **Endless delves:** generated floors, each with its own theme and creatures.
+- **One more run (v6.1):** when the party falls in an endless delve, the run ends with a summary (how deep, how many foes, how much gold, what struck last) and unlocks something for the next: starting kit, a class variant (Vanguard, Hedge Witch, War Priest, Cutthroat) or stranger stone for the floors. Chests in a delve can hold Fine (+1) and Masterwork (+2) gear, unidentified until it is worn or Simz looks at it.
 - **62 monsters** that live where they belong: warrens, crypts, flooded halls, ruins, the deep and the forges. Some have signature moves. The gelatinous cube swallows a hero, the medusa turns one to stone, and fire stops a troll mending.
 - **A dungeon that fights back:** hidden traps, chests that bite, fountains, altars, riddling statues, prisoners to free, pressure plates, portcullises, ice and one-way doors.
 - **A town** where Mitz keeps the temple and Simz the shop.
@@ -57,7 +58,7 @@ You need [Node](https://nodejs.org). From the top folder:
 sh tests/run_gate.sh
 ```
 
-It runs 29 runners with 2,408 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
+It runs 30 runners with 2,464 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
 
 ## Licence
 

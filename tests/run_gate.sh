@@ -3,6 +3,7 @@
 # Run from anywhere: sh tests/run_gate.sh. The runners read ./index.html and the
 # files beside it, so the gate moves to the repo's top folder first.
 #
+# v5.5: the run runner joins the gate (30 runners): the run record, unlocks, variants, rarities, seed-picked zones.
 # v6.0: the view3d runner joins the gate (29 runners): zones, materials, the floor built in 3D, the hand-over.
 # v4.9: the rogue runner joins the gate (28 runners): the Rogue, locks, signature moves, tools, spells, rings.
 # v4.8: the dungeon runner joins the gate (27 runners): traps, finds, mechanisms, dressing.
@@ -16,7 +17,7 @@
 # code is checked now, and the summary line is read from its output.
 cd "$(dirname "$0")/.." || exit 1
 fails=0
-for r in pack map party save combat town inventory world events vocab spells skills solve gen sprites chooser tierb roster look baseline minis terrain campaign motion bestiary sound dungeon rogue view3d; do
+for r in pack map party save combat town inventory world events vocab spells skills solve gen sprites chooser tierb roster look baseline minis terrain campaign motion bestiary sound dungeon rogue view3d run; do
   out=$(node tests/harness_${r}.js 2>&1)
   code=$?
   line=$(printf '%s\n' "$out" | grep -E '^(PASSED|FAILED)' | tail -1)

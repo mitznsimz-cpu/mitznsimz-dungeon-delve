@@ -47,6 +47,9 @@ const JOBS = +opt('jobs', 4);
 const BOSSES = args.includes('--bosses');
 // --shots N: a picture of the screen every N ticks (to look at the view, v6.0)
 const SHOTS = +opt('shots', 0);
+// --meta N: v5.5 check. A fresh player (nothing stored) plays endless runs until
+// N of them have ended, and passes only if every one of them unlocked something.
+const META = +opt('meta', 0);
 // --view 2d|3d: which view to play in (v6.0). 2D by default: the bot checks the game, and here
 // the 3D view is drawn in software (about a second a frame). --view 3d for a short look at it.
 const VIEW = opt('view', '2d');
@@ -83,6 +86,7 @@ const PAGE = function () {
     if (on('menu')) return 'menu';
     if (on('inv')) return 'inv';
     if (on('sheet')) return 'sheet';
+    if (on('runEnd')) return 'runend';
     if (on('victory')) return 'victory';
     if (on('evt')) return 'evt';
     if (on('combat')) return 'combat';
@@ -125,6 +129,13 @@ const PAGE = function () {
     if (s === 'menu') return { do: 'click', sel: '#closeMenu', why: 'close the menu' };
     if (s === 'inv') return { do: 'click', sel: '#closeInv', why: 'close the packs' };
     if (s === 'sheet') return { do: 'click', sel: '#sheetClose', why: 'close the sheet' };
+    // v5.5: an endless run is over. Note what it unlocked, then go again (or wake)
+    if (s === 'runend') {
+      var seen = { title: (document.getElementById('runTitle') || {}).textContent || '',
+                   unlocks: Array.from(document.querySelectorAll('#runUnlocks li[data-unlock]')).map(function (li) { return li.getAttribute('data-unlock'); }) };
+      var again = r.meta || r.roll < 0.5;
+      return { do: 'click', sel: again ? '#runAgain' : '#runWake', why: 'run over: ' + (again ? 'one more run' : 'wake at the door'), runEnd: seen };
+    }
     if (s === 'victory') return { do: 'click', sel: '#vicContinue', why: 'won: keep exploring', won: true };
 
     if (s === 'chooser') {
@@ -374,10 +385,11 @@ async function playRun(browser, n, mode, motion) {
   page.on('dialog', d => {
     const m = d.message();
     if (/size/i.test(m)) return d.accept(['small', 'medium', 'large'][seed % 3]);
-    if (/floors/i.test(m)) return d.accept(seed % 2 ? 'endless' : '4');
+    if (/floors/i.test(m)) return d.accept(META || seed % 2 ? 'endless' : '4');
     return d.accept(String(seed));
   });
 
+  const runEnds = [];
   let tick = 0, won = false, floors = new Set(), fights = 0, wipes = 0, reloads = 0, steps = 0, tells = 0;
   let lastOutcome = null, fled = 0, fightLog = [], missed = 0, lastSig = '', still = 0, foesWait = 0, frozenFor = 0, wanderFor = 0;
   await page.goto('file://' + HTML);
@@ -420,7 +432,7 @@ async function playRun(browser, n, mode, motion) {
       const d = __bot.decide(r);
       return { d, bad: __bot.check(), sig: __bot.sig(), floor: window.floor && floor.id, inFight: !!window.cst, outcome: window.cst && cst.outcome,
                foes: window.cst ? cst.foes.map(f => f.name).join(', ') : '', levels: (window.party || []).map(c => c.level).join('/') };
-    }, { mode, roll: R(), roll2: R(), resume: false, floorBudget: 400 }).catch(e => ({ err: e.message }));
+    }, { mode, meta: !!META, roll: R(), roll2: R(), resume: false, floorBudget: 400 }).catch(e => ({ err: e.message }));
     if (st.err) { fault('page-error', 'the bot could not read the page: ' + st.err); break; }
     const d = st.d;
     if (log.length > 60) log.shift();
@@ -429,6 +441,8 @@ async function playRun(browser, n, mode, motion) {
 
     st.bad.forEach(b => fault(/fight screen/.test(b) ? 'screen-mismatch' : 'bad-number', b));
     if (st.floor) floors.add(st.floor);
+    if (d.runEnd) { runEnds.push(d.runEnd); notes.push(d.runEnd.title + ': ' + (d.runEnd.unlocks.join(', ') || 'nothing')); }
+    if (META && runEnds.length >= META) break;
     if (d.won && !won) { won = true; notes.push('won the adventure at tick ' + tick); }
     if (st.outcome && st.outcome !== lastOutcome) { if (st.outcome === 'won') fights++; else if (st.outcome === 'lost') wipes++; else fled++;
       fightLog.push(st.outcome + ' vs ' + st.foes + ' (' + st.floor + ', party ' + st.levels + ')'); }
@@ -483,6 +497,10 @@ async function playRun(browser, n, mode, motion) {
     Object.keys(bossTold).forEach(k => { if (!bossTold[k]) fault('no-tell', k + ' never wound up where the bot could see and answer it'); });
     if (!Object.keys(bossTold).length) fault('no-tell', 'no boss fight was ever started');
   }
+  if (META) {
+    if (runEnds.length < META) fault('meta-short', 'only ' + runEnds.length + ' of ' + META + ' runs ended in ' + tick + ' ticks');
+    runEnds.forEach((e, k) => { if (!e.unlocks.length) fault('no-unlock', 'run ' + (k + 1) + ' (' + e.title + ') unlocked nothing'); });
+  }
   const out = { run: n, seed, mode, motion, ticks: tick, steps, floors: [...floors], fights, wipes, fled, reloads, tells, won, faults, notes, fightLog };
   if (faults.length) { out.lastMoves = log.slice(-25); out.shot = await shot('end'); }
   await ctx.close();
@@ -529,7 +547,7 @@ async function reloadCheck(page, fault) {
 /* ---------------------------------------------------------------- all runs */
 (async () => {
   const browser = await chromium.launch();
-  const modes = MODE === 'both' ? ['endless', 'written'] : [MODE];
+  const modes = META ? ['endless'] : MODE === 'both' ? ['endless', 'written'] : [MODE];
   const motions = MOTION === 'both' ? ['on', 'off'] : [MOTION];
   const results = [];
   const t0 = Date.now();

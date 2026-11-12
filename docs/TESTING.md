@@ -29,7 +29,7 @@ That's it.
 | `tests/run_gate.sh` | Runs every harness in order. Your pre-commit check |
 | `msdd_party_balance.js` | The party balance test: plays the campaign and an 8-floor delve with 13 party mixes and prints how each fares. `node msdd_party_balance.js` (about 15 seconds). Not part of the gate |
 | `mitznsimz_minis.js` | The miniatures library shared with Hold the Line (2.5.0: 94 figures and 133 poses). The game embeds it; the gate checks the copy matches |
-| `tests/harness_*.js` | 29 runners. `view3d` covers the zones, the floor built in 3D and the hand-over between the views. `minis` covers the shared miniature library, `terrain` the floor's second layer, `campaign` saves, the town and banter, `motion` the fight animation, `bestiary` habitats and the creatures that live in them, `sound` sound.js and the game's settings, `dungeon` traps, chests, finds, mechanisms and the generator's dressing, `rogue` the Rogue, locks, signature moves, tools, spells and rings |
+| `tests/harness_*.js` | 30 runners. `run` covers the run record, unlocks, class variants, loot rarities and the zone pick. `view3d` covers the zones, the floor built in 3D and the hand-over between the views. `minis` covers the shared miniature library, `terrain` the floor's second layer, `campaign` saves, the town and banter, `motion` the fight animation, `bestiary` habitats and the creatures that live in them, `sound` sound.js and the game's settings, `dungeon` traps, chests, finds, mechanisms and the generator's dressing, `rogue` the Rogue, locks, signature moves, tools, spells and rings |
 
 
 ---
@@ -268,6 +268,45 @@ Individual runners work too, if you're iterating on one area:
 node tests/harness_combat.js
 ```
 
+### One more run (v6.1, the roadmap's v5.5)
+
+An endless delve is now a run. When the party falls, the run ends: a card
+names the floor it reached, the foes felled, the gold and kit found, and the
+blow that ended it (who fell last, to what). Each ended run unlocks the next
+thing on a fixed ladder (a run that reached floor 5 unlocks two):
+
+1. Delver's pack: every new delving party starts with two torches, a rope and an antidote.
+2. The Vanguard: a Fighter variant, +1 defence and -1 to hit.
+3. Stranger stone: delve floors may be cut from arcane vaults, old mines and timber cellars (3D).
+4. The Hedge Witch (Wizard: +3 magic, -2 body), then a heavier purse (+60 gold),
+   the War Priest (Priest: +1 to hit, -2 magic), Simz's compliments (two
+   draughts and an ether) and the Cutthroat (Rogue: +1 to hit, -1 defence).
+
+A variant is chosen on the party screen, beside the class. The record lives in
+storage apart from the saves (`msdd_meta`), so a new game keeps it. *One more
+run* starts a fresh delve with a fresh party; *Wake at the door* carries on in
+the same delve, as a new run.
+
+**Loot rarities.** About one plain chest in six in a generated delve holds a
+piece of gear from the depth's shop list (or a floor ahead). About two in five
+of those are Fine (+1) and one in five Masterwork (+2), and both come out
+unidentified: "Unidentified weapon", worth 10 gold to Simz until he looks at it
+(25 gold) or someone wears it. A three-floor run turns up a couple. The find is
+seeded by the delve's seed and the chest, so a reload opens it the same way.
+
+**Zones by seed.** A delve floor's zone is now picked from its theme's zones by
+the run's seed and the depth, so two delves look different from the first floor.
+
+The `run` runner (56 checks) covers the ladder, the record's repair from bad
+storage, kit and variants, the variant numbers, the find rates and rarities,
+identifying and wearing, the zone pick and the summary text. The bot's gate for
+it is `--meta`: a fresh player plays endless runs until three have ended, and
+passes only if each one unlocked something.
+
+```sh
+node tools/playbot.js index.html --meta 3 --runs 2 --jobs 2
+```
+
 ### Into 3D (v6.0)
 
 The corridor is drawn in WebGL 2 by `msdd_view3d.js`, with the materials and
@@ -280,8 +319,8 @@ built once; it is built again only when one of those answers changes.
 - **Moving:** the camera follows the game's own step and turn, so it is still
   one square at a time, four ways to face, with the v5.2 glides and head dip.
 - **Zones:** each floor wears one of 16 zones. Ashkeld's floors name theirs in
-  the pack (`"zone": "damp"`, `"sewer"`, `"arcane"`). Each delve theme names two,
-  worn the first and the second time round the themes. Without a zone, a floor
+  the pack (`"zone": "damp"`, `"sewer"`, `"arcane"`). Each delve theme names two;
+  the run's seed and the depth pick one (v6.1). Without a zone, a floor
   gets one by its habitat, then by its wall texture.
 - **Light:** the torch you carry and the wall torches the game already hangs,
   each lighting the stone per pixel, with shadows from the torch and the two
@@ -458,6 +497,7 @@ Open the HTML in a text editor and search for these markers:
 | `PACK CORE` | Pack loading and validation; the feature types, trap kinds, terrain kinds, habitats and monster traits; the solvability prover (keys, levers, plates, one-way doors, ice, falling bridges) |
 | `EVENT CORE` | Events, doors, keys, levers, search, region text, clearing rubble and webs; traps found, sprung and disarmed; the neutral finds |
 | `WORLD CORE` | Per-floor state, stair transitions, victory; which encounter wanders up where you stand |
+| `RUN CORE` | v6.1: the run record, the unlock ladder, class variants, the zone pick, the run summary |
 | `GEN CORE` | The endless-delve generator, with terrain and creatures by theme, and the dressing: traps, finds, ice, pillars |
 | `MINI CORE` | The shared miniature library (`mitznsimz_minis.js`, embedded word for word) |
 | `BUNDLED PACK` | The adventure data itself — content, not engine |

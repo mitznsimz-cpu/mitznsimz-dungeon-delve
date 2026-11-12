@@ -312,6 +312,27 @@
   #victory button{min-width:150px;height:46px;font-size:12px}
   #victory button.primary{border-color:var(--gold);color:var(--gold)}
 
+  /* v5.5: the end of an endless run */
+  #runEnd{position:fixed;inset:0;background:var(--ink);z-index:31;display:none;
+    flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;overflow:auto}
+  #runEnd.on{display:flex}
+  #runEnd h2{font-size:18px;margin:0 0 10px;color:var(--gold);letter-spacing:.02em}
+  #runEnd h3{font-size:12px;margin:4px 0 8px;color:var(--gold);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+  #runEnd p{font-size:12px;line-height:1.7;max-width:420px;margin:0 0 8px;color:var(--text)}
+  #runEnd .stats{font:11px/1.9 ui-monospace,Menlo,monospace;color:var(--stone);font-variant-numeric:tabular-nums;
+    margin:10px 0 16px;min-width:220px}
+  #runEnd .stats div{display:grid;grid-template-columns:1fr 48px 64px;gap:12px;text-align:left}
+  #runEnd .stats b{text-align:right}
+  #runEnd .stats b{color:var(--text)}
+  #runEnd .stats i.best{color:var(--gold);font-style:normal}
+  #runEnd ul{list-style:none;padding:0;margin:0 0 20px;max-width:440px;text-align:left}
+  #runEnd li{font-size:12px;line-height:1.6;padding:8px 10px;border:1px solid var(--line);margin:0 0 6px;color:var(--text)}
+  #runEnd li b{color:var(--gold);display:block}
+  #runEnd .acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  #runEnd button{min-width:150px;height:46px;font-size:12px}
+  #runEnd button.primary{border-color:var(--gold);color:var(--gold)}
+  .chip.variant{border-style:dashed}
+
   #look{flex:0 0 auto;border:1px solid var(--line);padding:7px 10px;background:rgba(0,0,0,.25)}
   #lookHead{font:11px/1.4 ui-monospace,Menlo,monospace;color:var(--gold);
     text-transform:uppercase;letter-spacing:.09em}
@@ -713,6 +734,17 @@
     <button id="vicContinue">Keep exploring</button>
   </div>
 </div>
+<div id="runEnd" role="dialog" aria-modal="true" aria-labelledby="runTitle">
+  <h2 id="runTitle">The run ends</h2>
+  <p id="runBlow"></p>
+  <div class="stats" id="runStats"></div>
+  <h3>Unlocked for the next run</h3>
+  <ul id="runUnlocks"></ul>
+  <div class="acts">
+    <button id="runAgain" class="primary">One more run</button>
+    <button id="runWake">Wake at the door</button>
+  </div>
+</div>
 <div id="evt"><div class="inner">
   <h2 id="evtTitle"></h2>
   <div class="story" id="evtStory"></div>
@@ -727,7 +759,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v6.0</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v6.1</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -4054,11 +4086,16 @@ function quickPartyMix(turn) {
 }
 
 /* --- derivation --- */
+/* v5.5: a class variant, unlocked across runs, shades one or two numbers. */
+function varBonus(ch, k) {
+  var V = typeof VARIANTS !== 'undefined' ? VARIANTS : null, v = V && ch && ch.variant && V[ch.variant];
+  return (v && v.class === ch.class && v[k]) || 0;
+}
 function maxBP(ch) {
   var cls = CLASSES[ch.class];
   var v = cls.bpDie + mod(ch.stats.con);          // level 1 = full die
   for (var i = 2; i <= ch.level; i++) v += (ch.gains.bp[i - 2] || 1);
-  return Math.max(ch.level, v);
+  return Math.max(ch.level, v + varBonus(ch, 'bp'));
 }
 
 /* v5.3.1: a lowered stat lowers the maxima; the current pools follow. */
@@ -4071,7 +4108,7 @@ function maxMP(ch) {
   if (!cls.mpDie) return 0;
   var v = cls.mpDie + mod(ch.stats[cls.mpStat]);
   for (var i = 2; i <= ch.level; i++) v += (ch.gains.mp[i - 2] || 1);
-  return Math.max(0, v);
+  return Math.max(0, v + varBonus(ch, 'mp'));
 }
 
 /* v4.9: a class with finesse (the rogue) strikes with Dexterity when its
@@ -4085,10 +4122,10 @@ function meleeToHit(ch) {
   // a trinket's hitBonus was copied onto the item and never added: the
   // Charm of Fortune did nothing for anyone's aim until v4.9
   var tr = ch.equipped && ch.equipped.trinket;
-  return Math.floor(ch.level * CLASSES[ch.class].toHitPerLevel) + strikeMod(ch) + ((tr && tr.hitBonus) || 0);
+  return Math.floor(ch.level * CLASSES[ch.class].toHitPerLevel) + strikeMod(ch) + ((tr && tr.hitBonus) || 0) + varBonus(ch, 'hit');
 }
 
-function defense(ch) { return 10 + mod(ch.stats.dex) + (ch.armorBonus || 0); }
+function defense(ch) { return 10 + mod(ch.stats.dex) + (ch.armorBonus || 0) + varBonus(ch, 'def'); }
 
 function spellTierUnlocked(level) { return Math.min(4, 1 + Math.floor((level - 1) / 2)); }
 
@@ -4331,7 +4368,7 @@ function serialise(st) {
     position: { floor: st.position.floor, x: st.position.x, y: st.position.y, facing: st.position.facing },
     party: st.party.map(function (c) {
       return {
-        id: c.id, name: c.name, class: c.class, archetype: c.archetype,
+        id: c.id, name: c.name, class: c.class, archetype: c.archetype, variant: c.variant || null,
         level: c.level, xp: c.xp, stats: c.stats, position: c.position || 1,
         rank: c.rank || (((c.position || 1) <= 2) ? 'front' : 'back'),
         sex: c.sex || 'female',
@@ -4357,6 +4394,7 @@ function serialise(st) {
                                 size: st.generated.size, endless: !!st.generated.endless,
                                 gen: st.generated.gen || 1, print: st.generated.print || null } : null,
     retired: (st.retired || []).slice(-40),
+    run: st.run ? JSON.parse(JSON.stringify(st.run)) : null,      // v5.5: this endless run so far
     // v4.8: someone fighting beside the party until the stairs
     ally: st.ally && st.ally.name ? { name: String(st.ally.name), dice: (st.ally.dice || [1, 6, 0]).slice(0, 3),
                                       toHit: st.ally.toHit || 3, floor: st.ally.floor || null } : null
@@ -4495,6 +4533,7 @@ function deserialise(blob, ctx) {
     party = b.party.map(function (r) {
       var ch = makeCharacter(r.name, r.class, r.stats, r.archetype);
       ch.id = r.id || ch.id;
+      if (r.variant) ch.variant = r.variant;            // v5.5
       ch.gains = { bp: (r.gains && r.gains.bp || []).slice(), mp: (r.gains && r.gains.mp || []).slice() };
       ch.level = Math.max(1, Math.min(r.level || 1, MAX_LEVEL));
       ch.xp = Math.max(0, r.xp || 0);
@@ -4543,6 +4582,7 @@ function deserialise(blob, ctx) {
     deepest: Math.max(1, Math.floor(b.deepest || 1)),
     generated: b.generated || null,
     retired: Array.isArray(b.retired) ? b.retired.slice() : [],
+    run: b.run && typeof b.run === 'object' ? b.run : null,
     ally: b.ally && b.ally.name && Array.isArray(b.ally.dice) ? b.ally : null
   };
   out.ok = true;
@@ -5191,6 +5231,7 @@ function bossUnleash(party, st, rng) {
       var braced = c.braced === st.round;
       if (braced) n = Math.max(1, Math.floor(n * TELL.braced));
       applyDamage(c, n);
+      if (c.bp <= 0) st.lastDown = { by: base, with: best.name, who: c.name, tell: true };
       ev.push({ kind: 'foehit', text: c.name + ' takes ' + n + (braced ? ', braced for it' : '') +
                 (c.bp <= 0 ? '. ' + c.name + ' goes down.' : '.') });
     });
@@ -6185,7 +6226,10 @@ function oneFoeAttack(party, st, foe, atk, rng, ev) {
         foe.stole = true; foe.bp = 0;
         ev.push({ kind: 'foehit', text: foe.name + ' snatches what it can and bolts into the dark.' });
       }
-      if (ch.bp === 0) ev.push({ kind: 'down', text: ch.name + ' falls.', on: 'p' + party.indexOf(ch) });
+      if (ch.bp === 0) {
+        ev.push({ kind: 'down', text: ch.name + ' falls.', on: 'p' + party.indexOf(ch) });
+        st.lastDown = { by: foe.name.replace(/ [A-Z]$/, ''), with: atk.name, who: ch.name };   // v5.5: the run summary
+      }
     } else {
       ev.push(withBlow({ kind: 'foemiss', text: foe.name + (atk.reach === 'ranged' ? ' looses at ' : ' lunges at ') +
                                         ch.name + ' and misses.' }, blow, { hit: false }));
@@ -6723,8 +6767,44 @@ function makeItem(refId) {
 
 function itemLabel(it) {
   if (!it) return '\u2014';
-  if (it.unknown) return (ITEMS[it.ref] && ITEMS[it.ref].unknown) || 'A plain ring';
-  return it.name + (it.bonus ? ' +' + it.bonus : '') + (it.damaged ? ' (damaged)' : '');
+  if (it.unknown) return (ITEMS[it.ref] && ITEMS[it.ref].unknown) || UNKNOWN_GEAR[it.slot] || 'A plain ring';
+  return (RARITY[it.rarity] ? RARITY[it.rarity].name + ' ' : '') +
+         it.name + (it.bonus ? ' +' + it.bonus : '') + (it.damaged ? ' (damaged)' : '');
+}
+
+/* v5.5: loot rarities. Gear found in a generated delve may be finer than what
+   Simz sells: a Fine piece is +1, a Masterwork +2. Either comes out of the dark
+   unidentified, so it shows as plain kit until it is worn or Simz looks at it,
+   and until then he pays 10 gold for it. Identified, it sells for what it is. */
+var RARITY = { fine: { name: 'Fine', bonus: 1 }, master: { name: 'Masterwork', bonus: 2 } };
+var UNKNOWN_GEAR = { weapon: 'Unidentified weapon', armor: 'Unidentified armour', shield: 'Unidentified shield',
+                     trinket: 'Unidentified trinket' };
+var FIND = { chance: 0.16, fine: 0.42, master: 0.22, ahead: 1 };    // per plain chest; of those found; shop depth + ahead
+
+function gearPool(depth) {
+  return Object.keys(ITEMS).filter(function (k) {
+    var b = ITEMS[k];
+    return ['weapon', 'armor', 'shield'].indexOf(b.slot) >= 0 && (b.value || 0) > 0 &&
+           !(b.flags || []).length && !b.cursed && !b.unknown && itemShopFrom(k) <= (depth || 1) + FIND.ahead;
+  }).sort();
+}
+/* What a chest holds besides its coin. Pure: the same rng gives the same find. */
+function rollFind(rng, depth) {
+  if (rng() >= FIND.chance) return null;
+  var pool = gearPool(depth);
+  if (!pool.length) return null;
+  var it = makeItem(pool[Math.floor(rng() * pool.length)]);
+  var r = rng();
+  var tier = r < FIND.master ? 'master' : r < FIND.master + FIND.fine ? 'fine' : null;
+  if (tier) { it.rarity = tier; it.bonus = RARITY[tier].bonus; it.unknown = true; }
+  return it;
+}
+/* A seed for one chest of one delve, so a reload opens it the same way. */
+function findRng(key) {
+  var h = ((PACK && PACK.generated && PACK.generated.seed) || 0) ^ 0x5bd1e995;
+  var k = String(key) + '@' + (floor && floor.id);
+  for (var i = 0; i < k.length; i++) h = Math.imul(h ^ k.charCodeAt(i), 2654435761) >>> 0;
+  return makeRng(h >>> 0);
 }
 
 function canUse(ch, it) {
@@ -6921,7 +7001,7 @@ function equipItem(ch, packIndex) {
   it.unknown = false;                               // wearing it is one way to find out (v4.9)
   recomputeArmor(ch);
   var notes = [ch.name + ' puts on the ' + (known ? itemLabel(it) : was.toLowerCase()) + '.'];
-  if (!known) notes.push('It is a ' + it.name + '. ' + ((ITEMS[it.ref] || {}).desc || ''));
+  if (!known) notes.push('It is a ' + itemLabel(it) + '. ' + ((ITEMS[it.ref] || {}).desc || ''));
   if (it.cursed) notes.push('It tightens on the finger. It will not come off.');
   return { ok: true, cursed: !!it.cursed, notes: notes };
 }
@@ -6976,7 +7056,8 @@ function doIdentify(ch, packIndex, gold) {
   if (gold < identifyCost()) return { ok: false, gold: gold, notes: ['Simz looks for ' + identifyCost() + ' gold first.'] };
   it.unknown = false;
   return { ok: true, gold: gold - identifyCost(), spent: identifyCost(),
-           notes: ['Simz turns it in the light. "' + it.name + '." ' + ((ITEMS[it.ref] || {}).desc || '')] };
+           notes: ['Simz turns it in the light. "' + itemLabel(it) + '." ' + (it.rarity ? 'Better than anything on his shelves. ' : '') +
+                   ((ITEMS[it.ref] || {}).desc || '')] };
 }
 function doUncurse(ch, slot, gold) {
   var it = ch.equipped[slot];
@@ -8906,7 +8987,7 @@ function receiveItem(party, preferredIdx, it) {
       return { ok: true, taker: ch.name, notes: [ch.name + ' takes the ' + itemLabel(it) + '.'] };
     }
   }
-  return { ok: false, notes: ['Nobody has room for the ' + it.name + '.'] };
+  return { ok: false, notes: ['Nobody has room for the ' + itemLabel(it).toLowerCase() + '.'] };
 }
 
 /* --- who should drink what: used by the UI to preselect a sensible target --- */
@@ -9037,6 +9118,111 @@ function castOutside(party, ci, sid, targetIdx, rng, ctx) {
   return out;
 }
 /* ==== INVENTORY CORE END ==== */
+
+/* ==== RUN CORE START ==== */
+/* v5.5 "One more run". An endless delve ends when the party falls. What it
+   reached is summed up, and every run that ends unlocks something for the
+   next: starting kit, a class variant, stranger stone. A run that got to the
+   fifth floor unlocks two. Pure: the page keeps the record (META) in storage. */
+var VARIANTS = {
+  vanguard:   { id: 'vanguard',   class: 'fighter', name: 'Vanguard',    blurb: 'Vanguard: +1 defence, \u22121 to hit. Built to hold the line.', def: 1, hit: -1 },
+  hedgewitch: { id: 'hedgewitch', class: 'mage',    name: 'Hedge Witch', blurb: 'Hedge Witch: 3 more magic, 2 less body.', mp: 3, bp: -2 },
+  warpriest:  { id: 'warpriest',  class: 'priest',  name: 'War Priest',  blurb: 'War Priest: +1 to hit, 2 less magic.', hit: 1, mp: -2 },
+  cutthroat:  { id: 'cutthroat',  class: 'rogue',   name: 'Cutthroat',   blurb: 'Cutthroat: +1 to hit, \u22121 defence.', hit: 1, def: -1 }
+};
+var UNLOCKS = [
+  { id: 'kit.delver', kind: 'kit', name: 'Delver\u2019s pack',
+    text: 'Every new delving party starts with two torches, a rope and an antidote.',
+    kit: ['it.torch', 'it.torch', 'it.rope', 'it.antidote'] },
+  { id: 'variant.vanguard', kind: 'variant', variant: 'vanguard', name: 'The Vanguard',
+    text: 'A Fighter may be a Vanguard: +1 defence, \u22121 to hit. Choose it on the party screen.' },
+  { id: 'zone.strange', kind: 'zone', name: 'Stranger stone',
+    text: 'Delve floors may now be cut from stranger stone: arcane vaults, old mines, timber cellars.' },
+  { id: 'variant.hedgewitch', kind: 'variant', variant: 'hedgewitch', name: 'The Hedge Witch',
+    text: 'A Wizard may be a Hedge Witch: 3 more magic, 2 less body.' },
+  { id: 'kit.purse', kind: 'kit', name: 'A heavier purse', text: 'Every new delving party starts with 60 more gold.', gold: 60 },
+  { id: 'variant.warpriest', kind: 'variant', variant: 'warpriest', name: 'The War Priest',
+    text: 'A Priest may be a War Priest: +1 to hit, 2 less magic.' },
+  { id: 'kit.draughts', kind: 'kit', name: 'Simz\u2019s compliments',
+    text: 'Every new delving party starts with two healing draughts and an ether.',
+    kit: ['it.potion', 'it.potion', 'it.ether'] },
+  { id: 'variant.cutthroat', kind: 'variant', variant: 'cutthroat', name: 'The Cutthroat',
+    text: 'A Rogue may be a Cutthroat: +1 to hit, \u22121 defence.' }
+];
+var RUN_BONUS_DEPTH = 5;
+// the stone a theme may wear once Stranger stone is unlocked, by theme
+var STRANGE_ZONES = ['arcane', 'lodge', 'arcane', 'mine', 'mine', 'lodge'];
+
+function emptyMeta() { return { v: 1, runs: 0, unlocked: [], best: { depth: 0, kills: 0, gold: 0 } }; }
+function cleanMeta(m) {
+  var e = emptyMeta();
+  if (!m || typeof m !== 'object') return e;
+  e.runs = Math.max(0, Math.floor(+m.runs) || 0);
+  e.unlocked = Array.isArray(m.unlocked) ? m.unlocked.filter(function (id) {
+    return UNLOCKS.some(function (u) { return u.id === id; });
+  }) : [];
+  var b = m.best || {};
+  ['depth', 'kills', 'gold'].forEach(function (k) { e.best[k] = Math.max(0, Math.floor(+b[k]) || 0); });
+  return e;
+}
+function hasUnlock(meta, id) { return !!meta && (meta.unlocked || []).indexOf(id) >= 0; }
+
+/* A run has ended: the record after it, and what it unlocked. */
+function recordRun(meta, sum) {
+  var m = cleanMeta(meta), gained = [], best = [];
+  m.runs++;
+  ['depth', 'kills', 'gold'].forEach(function (k) {
+    if ((sum[k] || 0) > m.best[k]) { if (m.best[k] > 0) best.push(k); m.best[k] = sum[k] || 0; }
+  });
+  var n = 1 + ((sum.depth || 0) >= RUN_BONUS_DEPTH ? 1 : 0);
+  UNLOCKS.forEach(function (u) {
+    if (gained.length < n && m.unlocked.indexOf(u.id) < 0) { m.unlocked.push(u.id); gained.push(u); }
+  });
+  return { meta: m, gained: gained, best: best };
+}
+
+function unlockedVariants(meta, classId) {
+  return UNLOCKS.filter(function (u) {
+    return u.kind === 'variant' && hasUnlock(meta, u.id) && VARIANTS[u.variant] && VARIANTS[u.variant].class === classId;
+  }).map(function (u) { return VARIANTS[u.variant]; });
+}
+function metaKit(meta) {
+  var out = { items: [], gold: 0 };
+  UNLOCKS.forEach(function (u) {
+    if (u.kind !== 'kit' || !hasUnlock(meta, u.id)) return;
+    out.items = out.items.concat(u.kit || []);
+    out.gold += u.gold || 0;
+  });
+  return out;
+}
+/* The zones a delve floor may wear: its theme's two, and the strange one once
+   unlocked. The run's seed and the depth pick among them (v5.5). */
+function delveZones(themeIdx, zones, meta) {
+  var z = (zones || []).slice();
+  if (hasUnlock(meta, 'zone.strange') && STRANGE_ZONES[themeIdx]) z.push(STRANGE_ZONES[themeIdx]);
+  return z;
+}
+function pickZone(list, seed, depth) {
+  if (!list.length) return null;
+  var h = Math.imul(((seed >>> 0) ^ 0x2545f491) + depth * 40503, 2654435761) >>> 0;
+  h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13;
+  return list[(h >>> 0) % list.length];
+}
+
+/* How it ended, in a sentence. */
+function blowText(sum) {
+  var b = sum && sum.blow;
+  if (!b || !b.by) return 'The party went down fighting.';
+  var who = /^[AEIOU]/.test(b.by) ? 'an ' : 'a ';
+  var boss = /^The /.test(b.by);
+  return b.who + ' fell last, to ' + (boss ? '' : who) + b.by + (b.with ? '\u2019s ' + b.with : '') +
+         (b.tell ? ', the blow it had been gathering' : '') + '.';
+}
+function runLines(sum) {
+  return [['Floor reached', sum.depth || 1], ['Foes felled', sum.kills || 0],
+          ['Gold found', sum.gold || 0], ['Kit found', sum.finds || 0]];
+}
+/* ==== RUN CORE END ==== */
 
 
 
@@ -9641,7 +9827,7 @@ function openSheet(ch) {
   if (!ch) return;
   var host = document.getElementById('sheetBody');
   document.getElementById('sheetName').textContent =
-    ch.name + ' \u2014 ' + CLASSES[ch.class].name + ', level ' + ch.level;
+    ch.name + ' \u2014 ' + (ch.variant && VARIANTS[ch.variant] ? VARIANTS[ch.variant].name : CLASSES[ch.class].name) + ', level ' + ch.level;
   host.innerHTML = '';
 
   var sect = function (t) {
@@ -11171,6 +11357,7 @@ function endCombat() {
   var kills = cst.foes.filter(function (f) { return f.bp <= 0 && !f.fled; }).length;
   var beaten = describeFoes(cst.foes);
   beaten = beaten.charAt(0).toUpperCase() + beaten.slice(1);   // a sentence starts with a capital (v4.9)
+  if (out === 'won') runNote('kills', kills);
   if (out === 'won') say(beaten + ' defeated \u2014 ' + kills +
                          ' down, ' + cst.xpAwarded + ' experience.');
   else if (out === 'fled') say(wentHome ? 'The world reassembles. You are in town.'
@@ -11186,7 +11373,8 @@ function endCombat() {
     pos = { x: floor.entry[0], y: floor.entry[1], f: floor.entryFacing };
     prev = { x: pos.x, y: pos.y, f: pos.f };
     say('You wake at the tower door. ' + (r.lost > 0 ? r.lost + ' gold gone from your purse.' : 'Nothing left to lose.'));
-    hint('wipe');
+    if (PACK.endless) endRun(cst.lastDown);         // v5.5: an endless run ends here
+    else hint('wipe');
   } else if (out === 'won') {
     var g = cst.foes.reduce(function (a, f) { return a + rollDice(actionRng, f.gold); }, 0);
     // what a mimic was sitting on (v4.8)
@@ -11197,6 +11385,7 @@ function endCombat() {
       say('Inside what is left of it: ' + (hoard ? hoard + ' gold' : 'nothing that glitters') + '. ' + got);
     }
     gold += g;
+    runNote('gold', g);
     if (g > 0) sfx('coin');
     threat = Math.max(0, threat - RULES.threat.perCombatWon);
     var ready = party.filter(canLevel).map(function (c) { return c.name; });
@@ -11242,6 +11431,21 @@ function storageAvailable() {
   catch (e) { return false; }
 }
 
+/* v5.5: the record kept across runs, apart from any one save. */
+var META = null;
+function metaKey() { return MSDD_NS + 'msdd_meta'; }
+function getMeta() {
+  if (META) return META;
+  try { var raw = localStorage.getItem(metaKey()); META = cleanMeta(raw ? JSON.parse(raw) : null); }
+  catch (e) { META = emptyMeta(); }
+  return META;
+}
+function putMeta(m) {
+  META = cleanMeta(m);
+  try { localStorage.setItem(metaKey(), JSON.stringify(META)); } catch (e) {}
+  return META;
+}
+
 function readSlot(id) {
   try {
     var raw = localStorage.getItem(slotKey(id));
@@ -11276,6 +11480,7 @@ function captureState() {
     deepest: deepest,
     generated: PACK.generated || null,
     retired: retired,
+    run: RUN,
     ally: ally
   };
 }
@@ -11351,6 +11556,7 @@ function loadBlob(raw, filePack) {
   threat = st.threat;
   lightTurns = st.lightTurns || 0;
   levitateTurns = st.levitateTurns || 0; waterwalkTurns = st.waterwalkTurns || 0;
+  RUN = st.run || null;
   questFlags = st.questFlags;
   createdAt = st.createdAt;
   currentSlotName = st.slotName;
@@ -11693,6 +11899,45 @@ function rerollSlot(i) {
 }
 function rerollAll() { for (var i = 0; i < 4; i++) rerollSlot(i); renderRoster(); }
 
+/* ---------- One more run (v5.5) ---------- */
+var RUN = null;           // this endless run so far: { n, kills, gold, finds, deepest }
+function startRunStats() {
+  RUN = PACK && PACK.endless ? { n: getMeta().runs + 1, kills: 0, gold: 0, finds: 0,
+                                 deepest: (floor && floor.depth) || 1 } : null;
+}
+function runNote(k, n) { if (RUN) RUN[k] = (RUN[k] || 0) + (n || 0); }
+function runDepth() { if (RUN && floor && (floor.depth || 1) > RUN.deepest) RUN.deepest = floor.depth; }
+
+/* The party fell in an endless delve: the run is over. Sum it up, record it,
+   and offer another. Behind the card the party has already woken at the door,
+   so Wake at the door simply carries on, as a new run. */
+function endRun(blow) {
+  if (!PACK || !PACK.endless) return null;
+  var r = RUN || { kills: 0, gold: 0, finds: 0, deepest: 1 };
+  var sum = { depth: r.deepest || 1, kills: r.kills || 0, gold: r.gold || 0, finds: r.finds || 0, blow: blow || null };
+  var rec = recordRun(getMeta(), sum);
+  putMeta(rec.meta);
+  showRunEnd(sum, rec);
+  startRunStats();
+  return rec;
+}
+function showRunEnd(sum, rec) {
+  var el = document.getElementById('runEnd');
+  if (!el) return;
+  document.getElementById('runTitle').textContent = 'Run ' + rec.meta.runs + ' ends on floor ' + sum.depth;
+  document.getElementById('runBlow').textContent = blowText(sum);
+  document.getElementById('runStats').innerHTML = runLines(sum).map(function (l) {
+    var k = { 'Floor reached': 'depth', 'Foes felled': 'kills', 'Gold found': 'gold' }[l[0]];
+    return '<div><span>' + esc(l[0]) + '</span><b>' + l[1] + '</b>' +
+           '<i class="best">' + (k && rec.best.indexOf(k) >= 0 ? 'best yet' : '') + '</i></div>';
+  }).join('');
+  document.getElementById('runUnlocks').innerHTML = rec.gained.length
+    ? rec.gained.map(function (u) { return '<li data-unlock="' + esc(u.id) + '"><b>' + esc(u.name) + '</b> ' + esc(u.text) + '</li>'; }).join('')
+    : '<li class="none">Everything is unlocked. The deep keeps count all the same.</li>';
+  el.classList.add('on');
+  sfx('chime');
+}
+
 /* ---------- Endless Delve ---------- */
 var BUNDLED_BASE = null;      // the authored pack, kept so a delve can borrow its content
 var bringParty = true;        // veterans travel with you unless you say otherwise
@@ -11716,6 +11961,7 @@ function startEndless(seed, floors, size, endless) {
 
   document.getElementById('menu').classList.remove('on');
   if (carry) {
+    startRunStats();
     document.getElementById('roster').classList.remove('on');
     say(partySummary() + ' descend into ' + PACK.name + '.');
     redraw();
@@ -11890,7 +12136,7 @@ function resetRun(keepParty) {
 function resetRunInner() {
   party = [];
   world = {}; questFlags = {};
-  deepest = 1; retired = []; ally = null;
+  deepest = 1; retired = []; ally = null; RUN = null;
   currentSlotName = defaultCampaignName(); createdAt = null; basePlaytime = 0; sessionStart = Date.now();
   gold = 0; threat = 0; lightTurns = 0; levitateTurns = 0; waterwalkTurns = 0; msgLog = [];
   cst = null;
@@ -12021,8 +12267,18 @@ function renderRoster() {
       b.textContent = CLASSES[cid].name + (short.length ? ' \u00b7 needs ' + short.join(', ') : '');
       b.disabled = short.length > 0;
       b.title = short.length ? 'Reroll for a better ' + short.join('/') : CLASSES[cid].blurb;
-      b.addEventListener('click', function () { s.class = cid; renderRoster(); });
+      b.addEventListener('click', function () { if (s.class !== cid) s.variant = null; s.class = cid; renderRoster(); });
       row.appendChild(b);
+    });
+    // v5.5: a class variant earned in an earlier run
+    if (s.class) unlockedVariants(getMeta(), s.class).forEach(function (v) {
+      var vb = document.createElement('button');
+      vb.className = 'chip variant' + (s.variant === v.id ? ' on' : '');
+      vb.textContent = v.name;
+      vb.title = v.blurb;
+      vb.setAttribute('aria-pressed', s.variant === v.id ? 'true' : 'false');
+      vb.addEventListener('click', function () { s.variant = s.variant === v.id ? null : v.id; renderRoster(); });
+      row.appendChild(vb);
     });
 
     var rb = document.createElement('button');
@@ -12042,7 +12298,7 @@ function renderRoster() {
     el.appendChild(sl);
 
     var bl = document.createElement('p'); bl.className = 'blurb';
-    bl.textContent = s.class ? CLASSES[s.class].blurb : 'Eligible: ' + eligibleClasses(s.stats).map(function (c) { return CLASSES[c].name; }).join(', ');
+    bl.textContent = s.class ? (s.variant && VARIANTS[s.variant] ? VARIANTS[s.variant].blurb : CLASSES[s.class].blurb) : 'Eligible: ' + eligibleClasses(s.stats).map(function (c) { return CLASSES[c].name; }).join(', ');
     el.appendChild(bl);
 
     host.appendChild(el);
@@ -12084,12 +12340,25 @@ function beginDelve() {
     return { name: s.name, class: s.class, archetype: s.archetype,
              stats: s.stats, sex: s.sex };
   }));
+  // v5.5: a variant chosen on the party screen, if it is unlocked for the class
+  party.forEach(function (c, i) {
+    var v = slots[i] && slots[i].variant && VARIANTS[slots[i].variant];
+    if (v && v.class === c.class && unlockedVariants(getMeta(), c.class).indexOf(v) >= 0) {
+      c.variant = v.id; c.bp = maxBP(c); c.mp = maxMP(c);
+    }
+  });
   grantStartingSpells(party);
   grantStartingSkills(party);
   startingKit(party);
   normalisePositions(party);
   party.forEach(function (c) { c.effects = []; });
   gold = RULES.startingGold != null ? RULES.startingGold : 120;
+  if (PACK && PACK.generated) {                    // v5.5: what earlier runs unlocked
+    var mk = metaKit(getMeta());
+    mk.items.forEach(function (ref, i) { if (ITEMS[ref]) receiveItem(party, i % party.length, makeItem(ref)); });
+    gold += mk.gold;
+  }
+  startRunStats();
   document.getElementById('roster').classList.remove('on');
   markExplored();
   redraw();
@@ -12578,9 +12847,14 @@ function openChest(feat, key) {
   consumed.push(key);
   var coin = feat.gold ? rollDice(actionRng, feat.gold) : 10 + Math.floor(actionRng() * 40);
   gold += coin;
+  runNote('gold', coin);
   var lines = ['The lid gives. ' + coin + ' gold.'];
   sfx('clack'); sfx('coin');
   if (feat.item) lines.push(receiveItem(party, 0, makeItem(feat.item)).notes.join(' '));
+  else if (PACK && PACK.generated) {                 // v5.5: a delve's plain chest may hold kit
+    var found = rollFind(findRng(key), floor.depth || 1);
+    if (found) { lines.push(receiveItem(party, 0, found).notes.join(' ')); runNote('finds', 1); }
+  }
   say(lines.join(' '));
   lootPlay('chest', Math.round(coin / 6) + 2, null);
   var b = pickBark(party, 'chest', actionRng);
@@ -12729,6 +13003,7 @@ function markExplored() {
   // Cell-by-cell discovery, but honest about line of sight: you learn what you
   // can actually see down a corridor, nothing more. Reuses the render cone.
   explored[pos.x + ',' + pos.y] = 1;
+  runDepth();
   visibleCells(floor, pos.x, pos.y, pos.f, currentSight(), sightBlocker()).forEach(function (c) {
     explored[c.x + ',' + c.y] = 1;
   });
@@ -13845,9 +14120,12 @@ function v3dActive() {
 }
 function v3dZone(f) {
   if (f.zone) return f.zone;
-  if (/^g\d/.test(f.id || '') && typeof themeFor === 'function') {        // a delve: the theme's zones, in turn
-    var th = themeFor(f.depth || 1), z = th.zones || [];
-    if (z.length) return z[Math.floor(((f.depth || 1) - 1) / GEN_THEMES.length) % z.length];   // first time round the themes, then the other
+  if (/^g\d/.test(f.id || '') && typeof themeFor === 'function') {        // a delve: the seed picks among the theme's zones (v5.5)
+    var d = f.depth || 1, th = themeFor(d);
+    var list = delveZones(GEN_THEMES.indexOf(th), th.zones, PACK && PACK.endless ? getMeta() : null);
+    var seed = PACK && PACK.generated ? PACK.generated.seed : 0;
+    var z = pickZone(list, seed, d);
+    if (z) return z;
   }
   return MSDD3D.zoneFor(f, MSDDMat);
 }
@@ -16012,6 +16290,19 @@ document.getElementById('openAbout').addEventListener('click', openAbout);
 document.getElementById('closeAbout').addEventListener('click', closeAbout);
 document.getElementById('chooserAbout').addEventListener('click', function (e) { e.preventDefault(); openAbout(); });
 document.getElementById('invBtn').addEventListener('click', openInv);
+document.getElementById('runWake').addEventListener('click', function () {
+  document.getElementById('runEnd').classList.remove('on');
+  autosave(); redraw();
+});
+document.getElementById('runAgain').addEventListener('click', function () {
+  document.getElementById('runEnd').classList.remove('on');
+  var size = (PACK && PACK.endless && PACK.endless.size) || 'medium';
+  var keep = bringParty;
+  bringParty = false;                              // a new run is a new party
+  var ok = startEndless(null, 3, size, true);
+  bringParty = keep;
+  if (!ok) redraw();
+});
 document.getElementById('vicContinue').addEventListener('click', function () {
   document.getElementById('victory').classList.remove('on');
   redraw();
