@@ -716,7 +716,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v5.2</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v5.3</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -12738,6 +12738,36 @@ function buildShadedAtlas() {
     g.fillStyle = hi; g.fillRect(x, y, w, h * 0.16);
   });
   ATLAS_SHADED = c;
+  buildReliefAtlases();
+}
+
+/* v5.3: carved depth from each texture's own light and dark (the packs carry
+   colour maps only). Bright texels are taken as standing proud: their edges
+   facing the light brighten, those facing away darken. Along a side wall the
+   texture runs from the near end to the far end, and the torch is at the near
+   end and above, so that is where the light comes from on both walls. */
+var ATLAS_RELIEF = { left: null, right: null };
+function buildReliefAtlases() {
+  if (!ATLAS_SHADED) return;
+  var W0 = ATLAS_SHADED.width, H0 = ATLAS_SHADED.height;
+  var src0 = ATLAS_SHADED.getContext('2d').getImageData(0, 0, W0, H0), d = src0.data;
+  var lum = new Float32Array(W0 * H0);
+  for (var i = 0, j = 0; i < d.length; i += 4, j++) lum[j] = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255;
+  ['left'].forEach(function (side) {
+    var sgn = -1;                                   // light from the near end (texture x = 0)
+    var c = document.createElement('canvas'); c.width = W0; c.height = H0;
+    var g = c.getContext('2d'), out = g.createImageData(W0, H0), o = out.data;
+    for (var y = 0; y < H0; y++) for (var x = 0; x < W0; x++) {
+      var k = y * W0 + x, xl = x > 0 ? k - 1 : k, xr = x < W0 - 1 ? k + 1 : k, yu = y > 0 ? k - W0 : k;
+      var slope = (lum[xr] - lum[xl]) * sgn + (lum[k] - lum[yu]) * 0.5;
+      var f = 1 - slope * 1.6;
+      f = f < 0.7 ? 0.7 : f > 1.3 ? 1.3 : f;
+      var q = k * 4;
+      o[q] = Math.min(255, d[q] * f); o[q + 1] = Math.min(255, d[q + 1] * f); o[q + 2] = Math.min(255, d[q + 2] * f); o[q + 3] = d[q + 3];
+    }
+    g.putImageData(out, 0, 0);
+    ATLAS_RELIEF.left = ATLAS_RELIEF.right = c;
+  });
 }
 
 function tile(name) {
@@ -12774,7 +12804,8 @@ function texFace(g, name, x1, y1, x2, y2, fogAmt) {
    correctly instead of smearing. */
 var TEX_SLICES = 40;
 
-function texSide(g, name, wx, fi, fogNear, fogFar) {
+function texSide(g, name, wx, fi, fogNear, fogFar, side) {
+  var art = (side < 0 ? ATLAS_RELIEF.left : side > 0 ? ATLAS_RELIEF.right : null) || ATLAS_SHADED || ATLAS_TINTED;
   var t = tile(name);
   if (!t) return false;
   var sN = planeScale(fi), sF = planeScale(fi + 1), denom = (sN - sF) || 1;
@@ -12797,7 +12828,7 @@ function texSide(g, name, wx, fi, fogNear, fogFar) {
 
     var sx = t[0] + t[2] * u0, sw = t[2] * (u1 - u0);
     var dx = Math.min(x0, x1), dw = Math.abs(x1 - x0) + 0.6;
-    g.drawImage(ATLAS_SHADED || ATLAS_TINTED, sx, t[1], Math.max(0.5, sw), t[3], dx, ty2, dw, by2 - ty2);
+    g.drawImage(art, sx, t[1], Math.max(0.5, sw), t[3], dx, ty2, dw, by2 - ty2);
 
     var f = fogNear + (fogFar - fogNear) * ((u0 + u1) / 2);
     if (f > 0.001) {
@@ -13002,11 +13033,210 @@ function edgeShade(g, a0x, a0y, a1x, a1y, b0x, b0y, b1x, b1y, strength) {
   g.beginPath(); g.moveTo(a0x, a0y); g.lineTo(a1x, a1y); g.lineTo(b1x, b1y); g.lineTo(b0x, b0y); g.closePath(); g.fill();
 }
 
+/* ---------- v5.3: dressed stone ----------
+   Detail on walls and floors, chosen by a hash of where it is, so it stays put
+   as you come and go. What a floor carries follows what kind of place it is. */
+function floorMood() {
+  var hab = (floor && floor.habitat) || '', wall = wallTileFor(floor) || '';
+  var gen = typeof themeFor === 'function' && floor && /^g\d/.test(floor.id) ? (themeFor(floor.depth || 1).habitats || []) : [];
+  var has = function (h) { return hab === h || gen.indexOf(h) >= 0; };
+  var damp = has('flooded') || has('deep') || has('warren') || /warren/.test(wall);
+  var hot = has('forge') || /lab|brick|terra/.test(wall);
+  var dead = has('crypt') || /tower|lab/.test(wall);
+  // chance per wall, in order: torch, chains, web, moss, soot, stain, crack
+  return {
+    torch: 0.07, chain: dead ? 0.05 : 0.025, web: dead ? 0.10 : 0.05,
+    moss: damp ? 0.16 : 0.03, soot: hot ? 0.12 : 0.04, stain: damp ? 0.12 : 0.06, crack: 0.12,
+    bones: dead ? 0.07 : 0.03, puddle: damp ? 0.08 : 0.0, chips: 0.06
+  };
+}
+var DRESS_ORDER = ['torch', 'chain', 'web', 'moss', 'soot', 'stain', 'crack'];
+/* What is on the wall of square (x, y) that faces dir (0 N, 1 E, 2 S, 3 W). */
+function wallDressing(x, y, dir, mood) {
+  var r = stoneHash(x, y, dir, 7, 4409), acc = 0;
+  mood = mood || floorMood();
+  for (var i = 0; i < DRESS_ORDER.length; i++) {
+    acc += mood[DRESS_ORDER[i]];
+    if (r < acc) return DRESS_ORDER[i];
+  }
+  return null;
+}
+function hasWallTorch(x, y) {
+  if (!floor || x < 0 || y < 0 || x >= floor.w || y >= floor.h) return false;
+  var mood = floorMood();
+  for (var d = 0; d < 4; d++) if (hasWall(floor.cells, x, y, d) && wallDressing(x, y, d, mood) === 'torch') return true;
+  return false;
+}
+
+/* A point on a wall of this square, in wall space: u along it (0 near, 1 far,
+   or left to right on the far wall), v down it (0 ceiling, 1 floor). */
+function wallMap(cell, side, near, far, px, ty, by) {
+  if (side === 0) return function (u, v) {
+    var x = px(cell.o - 0.5 + u, far), t = ty(far), b = by(far);
+    return { x: x, y: t + (b - t) * v, s: planeScale(far), h: b - t };
+  };
+  return function (u, v) {
+    var fi = near + (far - near) * u, x = px(cell.o + side * 0.5, fi), t = ty(fi), b = by(fi);
+    return { x: x, y: t + (b - t) * v, s: planeScale(fi), h: b - t };
+  };
+}
+
+function dressWall(g, cell, side, dir, near, far, px, ty, by, mood) {
+  var what = wallDressing(cell.x, cell.y, dir, mood);
+  if (!what) return;
+  var P = wallMap(cell, side, near, far, px, ty, by);
+  var hsh = function (i) { return stoneHash(cell.x, cell.y, dir, i, 6151); };
+  var dim = 1 - fog(side === 0 ? far : (near + far) / 2) * 0.85;
+  if (dim <= 0.04) return;
+  var line = function (pts, w, col) {
+    g.beginPath(); pts.forEach(function (p, i) { if (i) g.lineTo(p.x, p.y); else g.moveTo(p.x, p.y); });
+    g.lineWidth = w; g.strokeStyle = col; g.stroke();
+  };
+  var mid = P(0.5, 0.5), lw = Math.max(0.6, mid.h * 0.006);
+  g.save(); g.globalAlpha = dim; g.lineCap = 'round'; g.lineJoin = 'round';
+  if (what === 'crack') {
+    var u0 = 0.2 + hsh(1) * 0.6, v0 = 0.08 + hsh(2) * 0.3, pts = [P(u0, v0)];
+    for (var i = 1; i <= 5; i++) pts.push(P(u0 + (hsh(10 + i) - 0.5) * 0.10 * (i % 2 ? 1 : -1), v0 + i * (0.035 + hsh(20 + i) * 0.03)));
+    line(pts, lw * 1.4, 'rgba(10,6,4,0.62)');
+    line([pts[2], P(u0 + 0.10 * (hsh(3) > 0.5 ? 1 : -1), v0 + 0.26)], lw, 'rgba(10,6,4,0.5)');
+  } else if (what === 'moss') {
+    for (var m = 0; m < 16; m++) {
+      var mp = P(0.08 + hsh(30 + m) * 0.84, 0.86 + hsh(40 + m) * 0.13), mr = mp.h * (0.012 + hsh(50 + m) * 0.02);
+      g.fillStyle = 'rgba(' + (40 + m) + ',' + (56 + m * 2) + ',32,0.45)';
+      g.beginPath(); g.ellipse(mp.x, mp.y, mr * 2.2, mr * 0.8, 0, 0, Math.PI * 2); g.fill();
+    }
+  } else if (what === 'soot') {
+    var sp = P(0.3 + hsh(4) * 0.4, 0.12), sr = sp.h * 0.42;
+    var sg = g.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, sr);
+    sg.addColorStop(0, 'rgba(0,0,0,0.42)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = sg; g.fillRect(sp.x - sr, sp.y - sr, sr * 2, sr * 2);
+  } else if (what === 'stain') {
+    for (var s = 0; s < 3; s++) {
+      var su = 0.25 + hsh(60 + s) * 0.5, top = P(su, 0.05), bot = P(su + 0.01, 0.35 + hsh(70 + s) * 0.35);
+      var st = g.createLinearGradient(top.x, top.y, bot.x, bot.y);
+      st.addColorStop(0, 'rgba(36,22,10,0.45)'); st.addColorStop(1, 'rgba(36,22,10,0)');
+      line([top, bot], lw * (3 + hsh(80 + s) * 3), st);
+    }
+  } else if (what === 'web') {
+    var corner = hsh(5) > 0.5 ? 0 : 1, c0 = P(corner, 0), rr = 0.22;
+    g.strokeStyle = 'rgba(225,220,205,0.30)'; g.lineWidth = lw * 0.7;
+    var spokes = [];
+    for (var k = 0; k <= 4; k++) {
+      var a = k / 4, end = P(corner ? 1 - rr * (1 - a) : rr * (1 - a), rr * 1.3 * a);
+      spokes.push(end); line([c0, end], lw * 0.7, 'rgba(225,220,205,0.30)');
+    }
+    [0.45, 0.8].forEach(function (f) {
+      line(spokes.map(function (e) { return { x: c0.x + (e.x - c0.x) * f, y: c0.y + (e.y - c0.y) * f }; }), lw * 0.6, 'rgba(225,220,205,0.25)');
+    });
+  } else if (what === 'chain') {
+    [0.35, 0.65].forEach(function (cu, ci) {
+      var len = 0.38 + hsh(90 + ci) * 0.12, links = 7;
+      for (var l = 0; l < links; l++) {
+        var pp = P(cu + Math.sin(l / links * Math.PI) * 0.02, 0.02 + len * l / links), lr = pp.h * 0.018;
+        g.strokeStyle = 'rgba(70,66,62,0.9)'; g.lineWidth = lw;
+        g.beginPath(); g.ellipse(pp.x, pp.y, lr * (l % 2 ? 0.5 : 0.9), lr * 1.3, 0, 0, Math.PI * 2); g.stroke();
+      }
+    });
+  } else if (what === 'torch') {
+    var tp = P(0.5, 0.36), th = tp.h;
+    g.globalAlpha = 1;
+    g.fillStyle = 'rgba(30,24,18,' + (0.9 * dim).toFixed(2) + ')';               // the bracket
+    g.fillRect(tp.x - th * 0.012, tp.y, th * 0.024, th * 0.12);
+    g.fillRect(tp.x - th * 0.04, tp.y + th * 0.10, th * 0.08, th * 0.02);
+    g.fillStyle = 'rgba(70,46,24,1)';                                            // the stick
+    g.fillRect(tp.x - th * 0.014, tp.y - th * 0.08, th * 0.028, th * 0.1);
+    var fx = tp.x, fy = tp.y - th * 0.11, fr = th * 0.09;                        // the flame: it lights itself
+    var fg = g.createRadialGradient(fx, fy, 0, fx, fy, fr * 3.2);
+    fg.addColorStop(0, 'rgba(255,200,110,0.55)'); fg.addColorStop(1, 'rgba(255,140,40,0)');
+    g.globalCompositeOperation = 'lighter';
+    g.fillStyle = fg; g.fillRect(fx - fr * 3.2, fy - fr * 3.2, fr * 6.4, fr * 6.4);
+    g.fillStyle = 'rgba(255,214,140,0.95)';
+    g.beginPath(); g.moveTo(fx, fy - fr * 1.3); g.quadraticCurveTo(fx + fr * 0.75, fy + fr * 0.2, fx, fy + fr * 0.55);
+    g.quadraticCurveTo(fx - fr * 0.75, fy + fr * 0.2, fx, fy - fr * 1.3); g.fill();
+    g.globalCompositeOperation = 'source-over';
+    VIEW_SPARKS.push({ x: fx, y: fy - fr, r: fr, hot: 0.6 });
+    LIGHT_SPOTS.push({ x: fx, y: fy + th * 0.15, r: th * 0.75, rgb: [255, 170, 80], a: 0.26 * dim });
+  }
+  g.restore();
+}
+
+/* Clutter on the floor of an empty square: bones, chips of stone, a puddle. */
+function dressFloor(g, cell, near, far, px, by, mood) {
+  if (cell.d === 0) return;
+  var r = stoneHash(cell.x, cell.y, 9, 9, 2203), what = null, acc = 0;
+  [['bones', mood.bones], ['puddle', mood.puddle], ['chips', mood.chips]].some(function (o) { acc += o[1]; if (r < acc) { what = o[0]; return true; } return false; });
+  if (!what) return;
+  var Q = function (u, v) { var fi = near + (far - near) * v; return { x: px(cell.o - 0.5 + u, fi), y: by(fi), s: planeScale(fi) }; };
+  var hsh = function (i) { return stoneHash(cell.x, cell.y, 9, i, 5521); };
+  var dim = 1 - fog((near + far) / 2) * 0.85;
+  if (dim <= 0.04) return;
+  var c = Q(0.5, 0.5), sz = Math.max(1, (Q(1, 0.5).x - Q(0, 0.5).x));
+  g.save(); g.globalAlpha = dim;
+  if (what === 'puddle') {
+    var u = 0.3 + hsh(1) * 0.4, v = 0.3 + hsh(2) * 0.4, pc = Q(u, v), rw = sz * (0.16 + hsh(3) * 0.1);
+    g.fillStyle = 'rgba(16,22,28,0.55)'; g.beginPath(); g.ellipse(pc.x, pc.y, rw, rw * 0.28, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(200,190,170,0.25)'; g.lineWidth = Math.max(0.5, sz * 0.006);
+    g.beginPath(); g.ellipse(pc.x, pc.y - rw * 0.05, rw * 0.7, rw * 0.16, 0, Math.PI * 1.1, Math.PI * 1.7); g.stroke();
+  } else if (what === 'bones') {
+    var bc = Q(0.35 + hsh(4) * 0.3, 0.3 + hsh(5) * 0.4), bl = sz * 0.12;
+    g.strokeStyle = 'rgba(214,204,180,0.85)'; g.lineCap = 'round'; g.lineWidth = Math.max(1, sz * 0.018);
+    for (var i = 0; i < 3; i++) { var a = hsh(10 + i) * Math.PI; g.beginPath();
+      g.moveTo(bc.x + Math.cos(a) * bl, bc.y + Math.sin(a) * bl * 0.25); g.lineTo(bc.x - Math.cos(a) * bl, bc.y - Math.sin(a) * bl * 0.25); g.stroke(); }
+    g.fillStyle = 'rgba(220,210,186,0.9)'; g.beginPath(); g.ellipse(bc.x + bl * 0.9, bc.y - sz * 0.02, sz * 0.035, sz * 0.03, 0, 0, Math.PI * 2); g.fill();
+  } else {
+    g.fillStyle = 'rgba(30,24,18,0.55)';
+    for (var k = 0; k < 6; k++) { var kp = Q(0.15 + hsh(20 + k) * 0.7, 0.15 + hsh(30 + k) * 0.7), kr = sz * (0.01 + hsh(40 + k) * 0.015);
+      g.beginPath(); g.ellipse(kp.x, kp.y, kr * 1.4, kr * 0.6, 0, 0, Math.PI * 2); g.fill(); }
+  }
+  g.restore();
+}
+
+/* Particles, drawn with the light in composeView: dust where the torch
+   reaches, sparks over embers and wall torches, mist over a chasm. Positions
+   come from the clock, not from stored state, so nothing builds up. */
+var VIEW_SPARKS = [], VIEW_MIST = [], LIGHT_SPOTS = [];
+function drawParticles(g, w, h, t) {
+  var fr = function (x) { return x - Math.floor(x); };
+  if (!VIEW_DARK) {
+    for (var i = 0; i < 28; i++) {
+      var sx = w * (0.18 + 0.64 * fr(i * 0.618 + Math.sin(t * 0.07 + i) * 0.03));
+      var sy = h * (0.20 + 0.70 * fr(i * 0.377 + t * (0.006 + (i % 5) * 0.002)));
+      var a = 0.10 + 0.10 * Math.sin(t * 0.9 + i * 2.1);
+      g.fillStyle = 'rgba(255,226,170,' + Math.max(0, a).toFixed(3) + ')';
+      g.fillRect(sx, sy, i % 3 ? 1.2 : 1.8, i % 3 ? 1.2 : 1.8);
+    }
+  }
+  g.globalCompositeOperation = 'lighter';
+  VIEW_SPARKS.forEach(function (s, si) {
+    for (var k = 0; k < 4; k++) {
+      var p = fr(t * (0.55 + k * 0.13) + si * 0.31 + k * 0.27);
+      var x = s.x + Math.sin(p * 9 + k * 2 + si) * s.r * 0.7, y = s.y - p * s.r * 5;
+      g.fillStyle = 'rgba(255,170,70,' + ((1 - p) * 0.8 * s.hot).toFixed(3) + ')';
+      g.fillRect(x, y, Math.max(1, s.r * 0.12), Math.max(1, s.r * 0.12));
+    }
+  });
+  g.globalCompositeOperation = 'source-over';
+  VIEW_MIST.forEach(function (m, mi) {
+    for (var k = 0; k < 2; k++) {
+      var dx = Math.sin(t * 0.25 + mi + k * 2.4) * m.w * 0.25;
+      var mg = g.createRadialGradient(m.x + dx, m.y, 0, m.x + dx, m.y, m.w * 0.6);
+      mg.addColorStop(0, 'rgba(170,176,186,0.16)'); mg.addColorStop(1, 'rgba(170,176,186,0)');
+      g.fillStyle = mg; g.fillRect(m.x + dx - m.w * 0.6, m.y - m.w * 0.6, m.w * 1.2, m.w * 1.2);
+    }
+  });
+}
+
 /* v5.1: what lights a square besides the torch: embers glow orange, holy
    ground a pale gold. A square next to one catches some of it too. */
 var GLOW = { embers: [255, 120, 40], holy: [255, 226, 150] };
 function glowNear(x, y) {
   var best = null;
+  // v5.3: a torch in a bracket lights its own square and the next
+  for (var ty9 = -1; ty9 <= 1; ty9++) for (var tx9 = -1; tx9 <= 1; tx9++) {
+    if (!hasWallTorch(x + tx9, y + ty9)) continue;
+    var ta = (tx9 || ty9) ? 0.35 : 0.8;
+    if (!best || ta > best.amt) best = { amt: ta, rgb: [255, 170, 80] };
+  }
   for (var dy = -2; dy <= 2; dy++) for (var dx = -2; dx <= 2; dx++) {
     var t = terrainAt(floor, x + dx, y + dy);
     if (!GLOW[t]) continue;
@@ -13356,6 +13586,8 @@ function drawView() {
   var bgx = VIEW_BASE.getContext('2d');
   bgx.setTransform(VIEW_BASE.width / Math.max(1, vc.w), 0, 0, VIEW_BASE.height / Math.max(1, vc.h), 0, 0);
   var c = { g: bgx, w: vc.w, h: vc.h }, g = c.g;
+  VIEW_SPARKS = []; VIEW_MIST = []; LIGHT_SPOTS = [];
+  var mood = floorMood();
   var cx = c.w / 2, cy = c.h * 0.5;
   // Full-bleed near plane. Undersizing this leaves a black margin around the
   // corridor, which reads as a rendering fault rather than a dark room.
@@ -13396,7 +13628,8 @@ function drawView() {
     var fogN = 0.02 + fog(near) * 0.88, fogF = 0.02 + fog(far) * 0.88;
     // v5.1: embers or holy ground nearby push the dark back
     var glow = glowNear(cell.x, cell.y);
-    if (glow) { fogN = Math.max(0, fogN - glow.amt * 0.22); fogF = Math.max(0, fogF - glow.amt * 0.22); }
+    // (v5.3: the light from embers, holy ground and wall torches is laid on as a
+    // smooth pool after the scene, not as a per-square lift that showed its edges)
     var xLn = px(cell.o - 0.5, near), xRn = px(cell.o + 0.5, near);
     var xLf = px(cell.o - 0.5, far),  xRf = px(cell.o + 0.5, far);
     var tn = ty(near), bn = by(near), tf = ty(far), bf = by(far);
@@ -13423,6 +13656,10 @@ function drawView() {
     var tctx = terr ? { g: g, cell: cell, near: near, far: far, px: px, ty: ty, by: by,
                         baseH: baseH, cleared: terrCleared } : null;
     if (terr) drawTerrainFloor(terr, tctx);
+    // v5.3: clutter on an empty floor; sparks over embers; mist over a drop
+    if (!terr && !floor.features[cell.x + ',' + cell.y]) dressFloor(g, cell, near, far, px, by, mood);
+    if (terr === 'embers' && cell.d > 0) VIEW_SPARKS.push({ x: (xLn + xRn + xLf + xRf) / 4, y: (bn + bf) / 2, r: (xRn - xLn) * 0.25, hot: 1 });
+    if (terr === 'chasm') VIEW_MIST.push({ x: (xLn + xRn + xLf + xRf) / 4, y: (bn + bf) / 2, w: (xRn - xLn) });
     // ceiling slab
     if (!texGround(g, wallTileFor(floor), xLn, xRn, tn, xLf, xRf, tf,
                    near, fogN + 0.34, fogF + 0.34)) {
@@ -13442,7 +13679,7 @@ function drawView() {
       var wtone = hexMix(faceTone(near), PAL.pitch, lit);
       var wallTex = wallTileFor(floor);
       if (!texSide(g, wallTex, { xn: xn, xf: xf, tn: tn, tf: tf, bn: bn, bf: bf },
-                   near, fogN + lit * 0.10, fogF + lit * 0.10)) {
+                   near, fogN + lit * 0.10, fogF + lit * 0.10, sd[0])) {
         poly(g, [xn, tn, xf, tf, xf, bf, xn, bn], wtone);
         masonrySide(g, { xn: xn, xf: xf, tn: tn, tf: tf, bn: bn, bf: bf },
                     sd[0], near, cell.x, cell.y, wtone);
@@ -13455,6 +13692,7 @@ function drawView() {
         edgeShade(g, xn, bn, xf, bf, xn, bn - hN * 0.18, xf, bf - hF * 0.18, ao);
         edgeShade(g, xn, tn, xf, tf, xn, tn + hN * 0.14, xf, tf + hF * 0.14, ao * 0.8);
       }
+      dressWall(g, cell, sd[0], sd[1], near, far, px, ty, by, mood);   // v5.3
       // crisp edge where wall meets floor
       g.strokeStyle = hexMix(PAL['stone-far'], PAL.pitch, fog(near) * 0.7);
       g.lineWidth = Math.max(0.6, 1.6 * planeScale(near));
@@ -13487,6 +13725,7 @@ function drawView() {
         contactShade(g, xLf, xRf, bf, bf - (bf - tf) * 0.22, 0.30);
         contactShade(g, xLf, xRf, tf, tf + (bf - tf) * 0.16, 0.34);
       }
+      dressWall(g, cell, 0, pos.f, near, far, px, ty, by, mood);         // v5.3
       // v5.1: and down its corners, where it meets a side wall
       var cw9 = (xRf - xLf) * 0.14, cs9 = 0.36 * (1 - fog(far) * 0.5);
       if (hasWall(cw, cell.x, cell.y, (pos.f + 3) % 4)) edgeShade(g, xLf, tf, xLf, bf, xLf + cw9, tf, xLf + cw9, bf, cs9);
@@ -13506,15 +13745,8 @@ function drawView() {
       masonryFace(g, xLn, xRn, tn, bn, near, cell.x, cell.y, faceTone(near));
     }
 
-    if (glow) {
-      var gmx = (xLn + xRn + xLf + xRf) / 4, gmy = (bn + bf) / 2, grr = Math.max(4, (xRn - xLn) * 0.9);
-      var gg = g.createRadialGradient(gmx, gmy, 0, gmx, gmy, grr);
-      var gc = glow.rgb.join(',');
-      gg.addColorStop(0, 'rgba(' + gc + ',' + (0.22 * glow.amt).toFixed(3) + ')');
-      gg.addColorStop(1, 'rgba(' + gc + ',0)');
-      g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = gg;
-      g.fillRect(gmx - grr, tn, grr * 2, bn - tn); g.restore();
-    }
+    var gt9 = terrainAt(floor, cell.x, cell.y);
+    if (GLOW[gt9] && cell.d > 0) LIGHT_SPOTS.push({ x: (xLn + xRn + xLf + xRf) / 4, y: (bn + bf) / 2, r: (xRn - xLn) * 1.5, rgb: GLOW[gt9], a: 0.30 });
 
     var feat = floor.features[cell.x + ',' + cell.y];
     if (feat && cell.d > 0) drawFeature(g, feat, cell, near, far, px, ty, by);
@@ -13532,6 +13764,17 @@ function drawView() {
 
   if (slide) g.restore();
   g.globalAlpha = 1;
+  // v5.3: what lights itself lights what is around it: a smooth pool, no edges
+  g.globalCompositeOperation = 'lighter';
+  LIGHT_SPOTS.forEach(function (l) {
+    var lg = g.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r);
+    var lc = l.rgb.join(',');
+    lg.addColorStop(0, 'rgba(' + lc + ',' + l.a.toFixed(3) + ')');
+    lg.addColorStop(0.5, 'rgba(' + lc + ',' + (l.a * 0.35).toFixed(3) + ')');
+    lg.addColorStop(1, 'rgba(' + lc + ',0)');
+    g.fillStyle = lg; g.fillRect(l.x - l.r, l.y - l.r, l.r * 2, l.r * 2);
+  });
+  g.globalCompositeOperation = 'source-over';
   // v5.1: warm where the torch reaches, cooler and dimmer beyond it. Part of the
   // scene, drawn once; the flicker only moves the lighter layers on top.
   var ty0 = c.h * 0.70, tint = g.createRadialGradient(cx, ty0, 0, cx, ty0, Math.max(c.w, c.h) * 0.95);
@@ -13572,6 +13815,8 @@ function composeView() {
   var cx = w / 2, dark = typeof currentSight === 'function' && currentSight() != null;
   VIEW_DARK = dark;
 
+  // v5.3: dust, sparks and mist, unless motion is reduced (then they hold still)
+  drawParticles(g, w, h, reduceMotion ? 0 : (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000);
   // the dark closes in at the edges; it closes in hard where the torch is no use
   g.globalCompositeOperation = 'source-over';
   var vg = g.createRadialGradient(cx, h * 0.55, Math.min(w, h) * 0.40 * f, cx, h * 0.55, Math.max(w, h) * 0.92);

@@ -727,5 +727,22 @@ ok('into a fight with a fade and zoom, back out with a fade', /@keyframes fightI
    /classList\.toggle\('zoom', !reduceMotion\)/.test(src));
 ok('none of it with reduced motion', /if \(reduceMotion\) \{ redraw\(\); if \(pendingSlide\)/.test(src) && /if \(reduceMotion\) \{ redraw\(\); return; \}\s*turning = d;/.test(src));
 
+console.log('\n[L33] dressed stone (v5.3)');
+ok('wall detail is chosen by where it is, so it stays put', /function wallDressing\(x, y, dir, mood\) \{\s*var r = stoneHash\(x, y, dir, 7, 4409\)/.test(src));
+ok('cracks, moss, soot, stains, chains, cobwebs and wall torches',
+   /var DRESS_ORDER = \['torch', 'chain', 'web', 'moss', 'soot', 'stain', 'crack'\];/.test(src) &&
+   ['crack', 'moss', 'soot', 'stain', 'web', 'chain', 'torch'].every(k => src.indexOf("what === '" + k + "'") > 0));
+ok('what a floor carries follows the kind of place', /var damp = has\('flooded'\)/.test(src) && /var hot = has\('forge'\)/.test(src) && /var dead = has\('crypt'\)/.test(src));
+ok('drawn in true perspective on the wall it belongs to', /function wallMap\(cell, side, near, far, px, ty, by\)/.test(src) &&
+   /dressWall\(g, cell, sd\[0\], sd\[1\], near, far, px, ty, by, mood\);/.test(src) && /dressWall\(g, cell, 0, pos\.f, near, far, px, ty, by, mood\);/.test(src));
+ok('clutter on empty floors: bones, chips, puddles where it is damp', /function dressFloor\(g, cell, near, far, px, by, mood\)/.test(src) &&
+   /if \(!terr && !floor\.features\[cell\.x \+ ',' \+ cell\.y\]\) dressFloor\(/.test(src));
+ok('a wall torch, embers and holy ground light their surroundings in smooth pools',
+   /LIGHT_SPOTS\.forEach\(function \(l\) \{/.test(src) && !/fogN = Math\.max\(0, fogN - glow\.amt/.test(src));
+ok('side walls carry relief from the texture\'s own shading, lit from the torch\'s end', /function buildReliefAtlases\(\)/.test(src) &&
+   /var art = \(side < 0 \? ATLAS_RELIEF\.left : side > 0 \? ATLAS_RELIEF\.right : null\) \|\| ATLAS_SHADED \|\| ATLAS_TINTED;/.test(src));
+ok('dust, sparks and mist with the light, still with reduced motion', /function drawParticles\(g, w, h, t\)/.test(src) &&
+   /drawParticles\(g, w, h, reduceMotion \? 0 :/.test(src));
+
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);

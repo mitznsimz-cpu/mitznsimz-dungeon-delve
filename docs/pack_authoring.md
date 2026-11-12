@@ -529,6 +529,23 @@ their sculptors give permission, and every figure is drawn.
 
 ---
 
+## How a floor is dressed (v5.3)
+
+You don't place wall detail or floor clutter: the game chooses it for each wall
+and empty square from a hash of where it is, so it is the same every visit.
+What a floor gets follows its `habitat` and its wall material:
+
+| The floor is | Its walls get more | Its floors get |
+|---|---|---|
+| damp (`flooded`, `deep`, `warren`, or `stone.warren` walls) | moss, drip stains | puddles |
+| hot (`forge`, or `stone.lab`, `stone.brick`, `stone.terra` walls) | soot | |
+| dead (`crypt`, or `stone.tower`, `stone.lab` walls) | chains, cobwebs | bones |
+
+Every floor also gets cracks, chips of stone, and now and then a torch in an
+iron bracket. A wall torch lights its stretch of passage, the way embers and
+holy ground (`embers`, `holy` terrain) light theirs. So the way to light a dark
+room is terrain: put embers or holy ground in it.
+
 ## Miniatures
 
 Every monster and hero is drawn as an unpainted plastic miniature on a round

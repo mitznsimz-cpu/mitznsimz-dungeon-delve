@@ -266,6 +266,16 @@ Individual runners work too, if you're iterating on one area:
 node tests/harness_combat.js
 ```
 
+### Dressed stone (v5.3)
+
+Walls carry cracks, moss, soot, drip stains, chains, cobwebs in the ceiling
+corners, and now and then a torch in an iron bracket that lights its stretch of
+passage. Empty floors have bones, chips of stone, or a puddle where it is damp.
+What a floor gets follows the kind of place it is (see the pack authoring guide),
+and each detail stays where it is every time you pass. The side walls carry a
+little carved relief, and dust drifts in the torchlight, sparks rise from embers
+and wall torches, and mist hangs over a chasm.
+
 ### In motion (v5.2)
 
 Moving is still one square and a quarter turn at a time, but each now glides:

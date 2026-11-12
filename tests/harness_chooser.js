@@ -178,7 +178,11 @@ const kb = s => Math.round(s.length/1024);
 // v4.9 again: minis 2.5.0 brings Hold the Line's eleven female heroes with
 // their poses (about 125 kb), so the library's budget goes from 640 to 760.
 const coreKb = kb((src.match(/\/\* ==== MINI CORE START ==== \*\/[\s\S]*?\/\* ==== MINI CORE END ==== \*\//) || [''])[0]);
-ok('the game file is much smaller than it was, not counting the shared minis', kb(src) - coreKb < 700, (kb(src) - coreKb) + ' kb');
+// v5.3: v5.0 to v5.3 (the play bot's fixes, hints, torchlight, motion and the
+// dressed stone) add about 60 kb, so the budget goes from 700 to 760; the
+// whole file stays well under the roadmap's 2 MB
+ok('the game file is much smaller than it was, not counting the shared minis', kb(src) - coreKb < 760, (kb(src) - coreKb) + ' kb');
+ok('and the whole file stays under 2 MB', kb(src) < 2048, kb(src) + ' kb');
 ok('and the shared minis keep to their own budget', coreKb < 760, coreKb + ' kb');
 // The shared miniature library is in the game on purpose (above); what the
 // assets file must outweigh is the rest of it.
