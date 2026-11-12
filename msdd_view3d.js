@@ -152,10 +152,7 @@
           G.flame.box(tx, 0.645, tz, 0.035, 0.05, 0.035);
           out.lamps.push([tx - FWD[d][0] * 0.08, 0.66, tz - FWD[d][1] * 0.08]);
         }
-        if (dress === 'chain') {
-          var hx = x + FWD[d][0] * 0.38 + (R(x, y, d + 40) - 0.5) * 0.3 * Math.abs(FWD[d][1]), hz = y + FWD[d][1] * 0.38 + (R(x, y, d + 41) - 0.5) * 0.3 * Math.abs(FWD[d][0]);
-          for (var k = 0; k * 0.045 < 0.3 + R(x, y, d + 42) * 0.25; k++) G.chain.box(hx, H - 0.02 - k * 0.045, hz, k % 2 ? 0.012 : 0.03, 0.05, k % 2 ? 0.03 : 0.012);
-        }
+        if (dress === 'chain') hangChains(G.chain, x, y, d, H, R);
       }
       // cobwebs in a corner: where the game dresses a wall with a web, or the zone asks for them
       var wantWeb = walls.some(function (d2) { return hooks.dressing && hooks.dressing(x, y, d2) === 'web'; }) ||
@@ -226,6 +223,51 @@
       // a heap: higher in the middle, stones resting on stones
       var lift = big ? Math.max(0, 1 - Math.hypot(dx, dz) / (spread * 0.55)) * 0.42 * R(x, y, 200 + r) : 0;
       g.box(x + ox + dx, sz * 0.4 + lift, y + oz + dz, sz, sz * 0.8, sz * 1.1, true, R(x, y, 90 + r) * 6, (R(x, y, 110 + r) - 0.5) * 0.7);
+    }
+  }
+  /* v6.1: chains of real links. One oval link is eight short bars round an
+     ellipse in an upright plane, turned by yaw; the next link is turned a
+     quarter, so they interlock. */
+  function chainLink(g, cx, cy, cz, yaw, len, wid, t) {
+    var N = 8, pts = [];
+    for (var i = 0; i <= N; i++) { var a = i / N * Math.PI * 2; pts.push([Math.sin(a) * wid / 2, Math.cos(a) * len / 2]); }
+    for (var k = 0; k < N; k++) {
+      var p = pts[k], q = pts[k + 1], dh = q[0] - p[0], dv = q[1] - p[1], L = Math.hypot(dh, dv) + t * 0.9;
+      var mh = (p[0] + q[0]) / 2, mv = (p[1] + q[1]) / 2;
+      g.box(cx + Math.sin(yaw) * mh, cy + mv, cz + Math.cos(yaw) * mh, t, L, t, true, yaw, Math.atan2(dh, dv));
+    }
+  }
+  /* One to three chains from staples in the ceiling near a wall, of different
+     lengths, some ending in an open manacle or a hook. */
+  function hangChains(g, x, y, d, H, R) {
+    var nx = FWD[d][0], nz = FWD[d][1], ax = -nz, az = nx;                  // towards the wall, and along it
+    var n = 1 + Math.floor(R(x, y, d + 44) * 2.4);
+    for (var c = 0; c < n; c++) {
+      var o = (n === 1 ? (R(x, y, d + 40) - 0.5) * 0.3 : (c / (n - 1) - 0.5) * 0.42) + (R(x, y, d + 50 + c) - 0.5) * 0.06;
+      var hx = x + nx * 0.4 + ax * o, hz = y + nz * 0.4 + az * o;
+      var yaw = Math.atan2(ax, az) + (R(x, y, d + 60 + c) - 0.5) * 0.5;
+      var links = 5 + Math.floor(R(x, y, d + 42 + c * 7) * 9), pitch = 0.052, top = H - 0.012;
+      g.box(hx, top, hz, 0.05, 0.016, 0.05);                                 // the staple plate
+      chainLink(g, hx, top - 0.03, hz, yaw + Math.PI / 2, 0.05, 0.03, 0.009); // its ring
+      for (var k = 0; k < links; k++) chainLink(g, hx, top - 0.065 - k * pitch, hz, yaw + (k % 2 ? Math.PI / 2 : 0), 0.072, 0.042, 0.011);
+      var end = top - 0.065 - links * pitch, kind = R(x, y, d + 70 + c);
+      if (kind < 0.4) {                                                      // an open manacle, hanging edge-on
+        var mr = 0.055, m = 10;
+        for (var j = 1; j < m; j++) {                                        // a ring with a gap at the top
+          var a0 = j / m * Math.PI * 2, a1 = (j + 1) / m * Math.PI * 2, s0 = [Math.sin(a0) * mr, -Math.cos(a0) * mr], s1 = [Math.sin(a1) * mr, -Math.cos(a1) * mr];
+          if (j === m - 1) break;
+          var mh = (s0[0] + s1[0]) / 2, mv = (s0[1] + s1[1]) / 2;
+          g.box(hx + Math.sin(yaw) * mh, end - mr + mv, hz + Math.cos(yaw) * mh, 0.016, Math.hypot(s1[0] - s0[0], s1[1] - s0[1]) + 0.01, 0.026, true, yaw, Math.atan2(s1[0] - s0[0], s1[1] - s0[1]));
+        }
+      } else if (kind < 0.65) {                                              // a meat hook
+        g.box(hx, end - 0.06, hz, 0.014, 0.1, 0.014);
+        var hk = [[0, -0.11], [0.03, -0.14], [0.06, -0.12], [0.065, -0.085]];
+        for (var h = 0; h < hk.length - 1; h++) {
+          var p = hk[h], q = hk[h + 1];
+          g.box(hx + Math.sin(yaw) * (p[0] + q[0]) / 2, end + (p[1] + q[1]) / 2, hz + Math.cos(yaw) * (p[0] + q[0]) / 2,
+                0.013, Math.hypot(q[0] - p[0], q[1] - p[1]) + 0.01, 0.013, true, yaw, Math.atan2(q[0] - p[0], q[1] - p[1]));
+        }
+      }
     }
   }
   function mistCell(g, x, y, R) {                              // a few soft sheets of mist

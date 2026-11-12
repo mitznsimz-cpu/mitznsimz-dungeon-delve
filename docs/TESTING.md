@@ -287,6 +287,13 @@ storage apart from the saves (`msdd_meta`), so a new game keeps it. *One more
 run* starts a fresh delve with a fresh party; *Wake at the door* carries on in
 the same delve, as a new run.
 
+**On a phone (v6.1.1).** Held upright, the view grows to up to 1.2 times as tall as it is
+wide, and the log folds to where you stand and its last two lines. *Log* opens
+the whole of it over the screen; *Close* folds it again. The buttons sit at the
+bottom, under your thumbs, and the automap inset is smaller. Hanging chains in
+3D are now interlocking links from a ceiling staple, one to three to a wall,
+some ending in an open manacle or a hook.
+
 **Loot rarities.** About one plain chest in six in a generated delve holds a
 piece of gear from the depth's shop list (or a floor ahead). About two in five
 of those are Fine (+1) and one in five Masterwork (+2), and both come out
