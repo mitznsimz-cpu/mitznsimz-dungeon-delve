@@ -301,6 +301,17 @@ built once; it is built again only when one of those answers changes.
   frame. `--view 3d` plays it in 3D, and `--shots N` takes a picture every N
   ticks to look at.
 
+**The fight screen (v6.0.3).** Each rank stands on a floor of its own: warm for
+the front, cool for the back, a dashed line between a side's two ranks, and a
+ground line under each (dashed for the back). The captions are coloured to
+match, with a sword for the front and a bow for the back. Whose turn it is shows
+three ways: a banner across the top of the stage ("ANSEL'S TURN, back rank" in
+gold, or "THEIR TURN" in red) that pops in when the turn changes hands, a beam
+of light over the one acting with a pulsing ring at their feet while the rest of
+the party is a shade dimmer, and "Ansel's turn" in the header, larger, with a
+pulse on each new turn. Reduced motion keeps all of it, without the pop and the
+pulse. The look runner checks it under [L34].
+
 The `view3d` runner (48 checks) builds every Ashkeld floor and a six-floor
 delve in node, with no WebGL: a ceiling over every open square, a wall on every
 walled edge, a leaf for every door; an open door, a found seam, an opened chest

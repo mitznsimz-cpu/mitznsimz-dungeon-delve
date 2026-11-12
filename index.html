@@ -337,6 +337,11 @@
   #foeWrap{flex:1 1 62%;min-height:180px}
   #cturn{display:flex;align-items:baseline;gap:8px;font:11px/1 ui-monospace,Menlo,monospace}
   #cturn .rnd{color:var(--text-dim)}
+  /* v6.0: whose turn it is, larger, and a pulse when it changes hands */
+  #cturn .who{font-size:15px}
+  #cturn.new{animation:turnPulse .55s ease-out}
+  @keyframes turnPulse{0%{transform:scale(1.12);text-shadow:0 0 12px rgba(227,169,60,.9)}100%{transform:scale(1);text-shadow:none}}
+  @media (prefers-reduced-motion:reduce){#cturn.new{animation:none}}
   #cturn .who{color:var(--gold);font-size:14px;font-weight:600;letter-spacing:.01em}
   #cturn .who.dim{color:var(--text-dim);font-size:12px;font-weight:400}
   #cturn .rk{color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;font-size:9px}
@@ -10395,6 +10400,37 @@ function tellMark(g, x, ground, hgt) {
   g.fillText('!', x, ground - hgt * 1.15);
   g.restore();
 }
+/* v6.0: whose turn it is, across the top of the stage. It pops in when the
+   turn changes hands, and stays while it is theirs. */
+var TURN_BANNER = { key: '', t0: 0 };
+function turnBanner(g, c, active) {
+  if (!cst || cst.outcome) return;
+  var me = active !== null && party[active];
+  var key = cst.round + ':' + (me ? 'p' + active : 'foes');
+  var now = typeof performance !== 'undefined' ? performance.now() : 0;
+  if (key !== TURN_BANNER.key) { TURN_BANNER.key = key; TURN_BANNER.t0 = now; }
+  var t = reduceMotion ? 1 : Math.min(1, (now - TURN_BANNER.t0) / 320), pop = 1 + 0.18 * Math.sin(Math.PI * t) * (1 - t);
+  var text = me ? me.name.toUpperCase() + '\u2019S TURN' : 'THEIR TURN';
+  var sub = me ? (isFront(me) ? 'front rank' : 'back rank') : 'the enemy acts';
+  var fs = Math.round((c.h >= 420 ? 17 : 14) * pop);
+  g.save(); g.globalAlpha = Math.min(1, t * 2.5);
+  g.font = 'bold ' + fs + 'px system-ui, -apple-system, Segoe UI, sans-serif'; g.textAlign = 'center';
+  var tw = g.measureText(text).width; g.font = (c.h >= 420 ? 11 : 10) + 'px ui-monospace, Menlo, monospace';
+  var sw = g.measureText(sub).width, w = tw + sw + 46, h = fs + 14, x = (me ? c.w * 0.75 : c.w * 0.25), y = 10;
+  x = Math.max(w / 2 + 6, Math.min(c.w - w / 2 - 6, x));
+  var col = me ? PAL.gold : PAL.red;
+  g.fillStyle = 'rgba(14,10,8,0.82)'; g.strokeStyle = col; g.lineWidth = 1.5;
+  g.beginPath(); if (g.roundRect) g.roundRect(x - w / 2, y, w, h, h / 2); else g.rect(x - w / 2, y, w, h); g.fill(); g.stroke();
+  g.fillStyle = col; g.font = 'bold ' + fs + 'px system-ui, -apple-system, Segoe UI, sans-serif'; g.textAlign = 'left';
+  g.fillText(text, x - w / 2 + 16, y + h / 2 + fs * 0.36);
+  g.fillStyle = PAL['text-dim']; g.font = (c.h >= 420 ? 11 : 10) + 'px ui-monospace, Menlo, monospace';
+  g.fillText(sub, x - w / 2 + 30 + tw, y + h / 2 + 4);
+  g.restore();
+  if (t < 1 && !reduceMotion && typeof requestAnimationFrame !== 'undefined' && !TURN_BANNER.raf) {
+    TURN_BANNER.raf = requestAnimationFrame(function () { TURN_BANNER.raf = 0; if (cst) drawFoes(); });
+  }
+}
+
 function drawFoes() {
   var c = fit(document.getElementById('foes')), g = c.g;
   g.clearRect(0, 0, c.w, c.h);
@@ -10457,6 +10493,38 @@ function drawFoes() {
   g.beginPath(); g.moveTo(mid, 8); g.lineTo(mid, c.h - 8); g.stroke();
 
   var active = activeActor(cst);
+  // v6.0: who stands where. Each rank has a floor of its own: warm for the
+  // front, cool for the back, a dashed line between, a ground line under each
+  var RZ = { front: [227, 169, 60], back: [120, 146, 186] };
+  function rankZone(x0, x1, ground, kind, edgeAt) {
+    if (x1 - x0 < 4) return;
+    var col = RZ[kind].join(','), top = c.h * 0.14, bot = c.h - 18;
+    var zg = g.createLinearGradient(0, top, 0, bot);
+    zg.addColorStop(0, 'rgba(' + col + ',0)'); zg.addColorStop(0.55, 'rgba(' + col + ',0.035)'); zg.addColorStop(1, 'rgba(' + col + ',' + (kind === 'front' ? 0.10 : 0.08) + ')');
+    g.fillStyle = zg; g.fillRect(x0 + 2, top, x1 - x0 - 4, bot - top);
+    g.strokeStyle = 'rgba(' + col + ',0.35)'; g.lineWidth = 1.5;
+    if (kind === 'back') g.setLineDash([6, 5]);
+    g.beginPath(); g.moveTo(x0 + 8, ground + 2); g.lineTo(x1 - 8, ground + 2); g.stroke(); g.setLineDash([]);
+    if (edgeAt != null) {                                     // between the back and the front of one side
+      g.strokeStyle = 'rgba(' + RZ.back.join(',') + ',0.30)'; g.setLineDash([3, 6]); g.lineWidth = 1;
+      g.beginPath(); g.moveTo(edgeAt, top); g.lineTo(edgeAt, bot); g.stroke(); g.setLineDash([]);
+    }
+  }
+  function rankCaption(x, text, kind) {
+    var col = kind === 'front' ? PAL.gold : 'rgb(' + RZ.back.join(',') + ')', y = c.h - 6;
+    g.font = 'bold ' + (c.h >= 420 ? 11 : 10) + 'px ui-monospace, Menlo, monospace'; g.textAlign = 'center';
+    var tw = g.measureText(text).width, ix = x - tw / 2 - 10, iy = y - 4;
+    g.globalAlpha = 0.85; g.fillStyle = col; g.fillText(text, x + 4, y);
+    g.strokeStyle = col; g.lineWidth = 1.4; g.beginPath();
+    if (kind === 'front') { g.moveTo(ix - 4, iy + 4); g.lineTo(ix + 4, iy - 4); g.moveTo(ix - 3, iy - 1); g.lineTo(ix + 1, iy + 3); }   // a sword
+    else {                                                                                                                                 // a bow
+      var bx0 = ix - 6, bcx = bx0 + 1.5, by0 = iy;
+      g.moveTo(bcx + 3.5 * Math.cos(-1.15), by0 + 6 * Math.sin(-1.15)); g.ellipse(bcx, by0, 3.5, 6, 0, -1.15, 1.15);   // the limbs
+      g.moveTo(bcx + 3.5 * Math.cos(-1.15), by0 + 6 * Math.sin(-1.15)); g.lineTo(bcx - 1, by0); g.lineTo(bcx + 3.5 * Math.cos(1.15), by0 + 6 * Math.sin(1.15));   // the string, drawn
+      g.moveTo(bcx - 1, by0); g.lineTo(bcx + 9, by0); g.moveTo(bcx + 9, by0); g.lineTo(bcx + 6.5, by0 - 2); g.moveTo(bcx + 9, by0); g.lineTo(bcx + 6.5, by0 + 2);   // the arrow
+    }
+    g.stroke(); g.globalAlpha = 1; g.textAlign = 'left';
+  }
   foeHits = []; allyHits = [];
 
   function band(list, x0, x1, ground, scale, opts) {
@@ -10513,6 +10581,7 @@ function drawFoes() {
         // v4.9: stone is dark and still, someone inside a cube or hidden is half there
         var stone = hasStatus(m, 'petrified'), inside = hasStatus(m, 'swallowed'), hid = m.hidden > 0;
         var heldLit = stone ? 0.3 : 1, heldAlpha = inside ? 0.4 : hid ? 0.35 : 1;
+        if (active !== null && !isNow && !isAlly && m.bp > 0) heldLit *= 0.72;   // v6.0: the one acting stands out
         moved('p' + pi, x, ground, hgt, function (fx, fy, e) {
           var flashNow = e ? e.flash > 0.35 : pHit;
           var drewHero = heroName && SPRITE_INDEX[heroName] &&
@@ -10575,6 +10644,13 @@ function drawFoes() {
   /* A pool of light under whoever is acting — unmissable, no text needed. */
   function spotlight(x, ground, hgt) {
     var r = hgt * 0.52;
+    // v6.0: a beam from above, so whose turn it is shows from across the room
+    var bw = hgt * 0.42, beam = g.createLinearGradient(0, 0, 0, ground);
+    beam.addColorStop(0, 'rgba(255,214,140,0)'); beam.addColorStop(1, 'rgba(255,214,140,0.16)');
+    g.fillStyle = beam; g.beginPath(); g.moveTo(x - bw * 0.35, 0); g.lineTo(x + bw * 0.35, 0); g.lineTo(x + bw, ground); g.lineTo(x - bw, ground); g.closePath(); g.fill();
+    var pulse = reduceMotion ? 1 : 0.8 + 0.2 * Math.sin(stageClock() / 180);
+    g.strokeStyle = 'rgba(227,169,60,' + (0.55 * pulse).toFixed(3) + ')'; g.lineWidth = 2.5;
+    g.beginPath(); g.ellipse(x, ground, hgt * 0.36 * (0.96 + 0.06 * pulse), hgt * 0.13, 0, 0, Math.PI * 2); g.stroke();
     var gl = g.createRadialGradient(x, ground, 0, x, ground, r);
     gl.addColorStop(0, 'rgba(227,169,60,0.30)');
     gl.addColorStop(1, 'rgba(227,169,60,0)');
@@ -10646,6 +10722,11 @@ function drawFoes() {
     return wb + wf > 0 ? wb / (wb + wf) : 0.5;
   };
   var foeCut = 0.02 + 0.45 * share(foeBackList.length, foeFrontList.length);
+  var frontX0z = cst.ally ? 0.585 : 0.53, ourCutz = 0.98 - (0.98 - frontX0z) * share(pBack.length, pFront.length);
+  if (foeBackList.length) rankZone(c.w * 0.02, c.w * foeCut, groundBack, 'back', foeFrontList.length ? c.w * foeCut : null);
+  if (foeFrontList.length) rankZone(c.w * foeCut, c.w * 0.47, groundFront, 'front');
+  if (pFront.length) rankZone(c.w * frontX0z, c.w * ourCutz, groundFront, 'front', pBack.length ? c.w * ourCutz : null);
+  if (pBack.length) rankZone(c.w * ourCutz, c.w * 0.98, groundBack, 'back');
   band(foeBackList,  c.w * 0.02, c.w * foeCut, groundBack,  0.80, { foe: true });
   band(foeFrontList, c.w * foeCut, c.w * 0.47, groundFront, 1.00, { foe: true });
   // someone freed from a cell stands at the near end of our front rank (v4.8)
@@ -10667,15 +10748,13 @@ function drawFoes() {
     label(ax, groundFront, al.name.slice(0, 8), false);
   }
 
-  // rank captions, so the geometry is legible at a glance
-  g.font = '9px ui-monospace, Menlo, monospace';
-  g.textAlign = 'center';
-  g.fillStyle = hexMix(PAL['text-dim'], PAL.pitch, 0.45);
-  // under the middle of each rank, wherever the shares put it (v4.9)
-  if (foeBackList.length)  g.fillText('THEIR BACK',  c.w * (0.02 + foeCut) / 2, c.h - 6);
-  if (foeFrontList.length) g.fillText('THEIR FRONT', c.w * (foeCut + 0.47) / 2, c.h - 6);
-  if (pFront.length)       g.fillText('YOUR FRONT',  c.w * (frontX0 + ourCut) / 2, c.h - 6);
-  if (pBack.length)        g.fillText('YOUR BACK',   c.w * (ourCut + 0.98) / 2, c.h - 6);
+  // rank captions, so the geometry is legible at a glance: coloured as the
+  // floors are, a sword for the front, a bow for the back (v6.0)
+  if (foeBackList.length)  rankCaption(c.w * (0.02 + foeCut) / 2, 'THEIR BACK', 'back');
+  if (foeFrontList.length) rankCaption(c.w * (foeCut + 0.47) / 2, 'THEIR FRONT', 'front');
+  if (pFront.length)       rankCaption(c.w * (frontX0 + ourCut) / 2, 'YOUR FRONT', 'front');
+  if (pBack.length)        rankCaption(c.w * (ourCut + 0.98) / 2, 'YOUR BACK', 'back');
+  turnBanner(g, c, active);
   if (qk) g.restore();
   g.textAlign = 'left';
 
@@ -10984,9 +11063,11 @@ function renderCombat() {
   if (cst.outcome) { turnEl.textContent = ''; turnEl.className = ''; }
   else if (i !== null) {
     turnEl.innerHTML = '<span class="rnd">Round ' + cst.round + '</span>' +
-      '<span class="who">' + esc(party[i].name) + '</span>' +
+      '<span class="who">' + esc(party[i].name) + '\u2019s turn</span>' +
       '<span class="rk">' + (isFront(party[i]) ? 'front rank' : 'back rank') + '</span>';
-    turnEl.className = 'on';
+    var tk = cst.round + ':' + i;
+    turnEl.className = 'on' + (turnEl.dataset.k !== tk && !reduceMotion ? ' new' : '');
+    if (turnEl.dataset.k !== tk) { turnEl.dataset.k = tk; setTimeout(function () { turnEl.classList.remove('new'); }, 600); }
   } else {
     turnEl.innerHTML = '<span class="rnd">Round ' + cst.round + '</span>' +
       '<span class="who dim">they act\u2026</span>';

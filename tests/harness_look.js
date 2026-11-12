@@ -674,7 +674,16 @@ ok('names are clipped to their slot', /var nm = clipTo\(m\.name\.slice\(0, 10\),
 ok('TARGET goes on a friend only where it fits', /isAlly && fits\(nm \+ '  \\u25c0 TARGET', step\)/.test(cv));
 ok('the bar and the name drop below a big figure\'s base',
    /function sizeUnder\(hgt\) \{ under = Math\.max\(0, hgt \* 0\.11 - 5\);/.test(cv) && /ground \+ 9 \+ LBL \+ under/.test(cv));
-ok('captions sit under each rank wherever it falls', /'THEIR FRONT', c\.w \* \(foeCut \+ 0\.47\) \/ 2/.test(cv));
+ok('captions sit under each rank wherever it falls', /rankCaption\(c\.w \* \(foeCut \+ 0\.47\) \/ 2, 'THEIR FRONT', 'front'\)/.test(cv));
+
+console.log('\n[L34] front and back, and whose turn it is, at a glance (v6.0)');
+ok('each rank stands on a floor of its own: warm for the front, cool for the back', /var RZ = \{ front: \[227, 169, 60\], back: \[120, 146, 186\] \};/.test(src) &&
+   /rankZone\(c\.w \* frontX0z, c\.w \* ourCutz, groundFront, 'front'/.test(src) && /rankZone\(c\.w \* ourCutz, c\.w \* 0\.98, groundBack, 'back'\)/.test(src));
+ok('the back rank\'s ground line is dashed, with a dashed line between the ranks', /if \(kind === 'back'\) g\.setLineDash\(\[6, 5\]\);/.test(src) && /g\.setLineDash\(\[3, 6\]\)/.test(src));
+ok('captions carry a sword for the front and a bow for the back', /\/\/ a sword/.test(src) && /\/\/ a bow/.test(src));
+ok('a banner says whose turn it is, and pops in when it changes hands', /function turnBanner\(g, c, active\)/.test(src) && /'\\u2019S TURN' : 'THEIR TURN'/.test(src) && /turnBanner\(g, c, active\);/.test(src));
+ok('the one acting stands in a beam of light; the others are a shade dimmer', /\/\/ v6\.0: a beam from above/.test(src) && /heldLit \*= 0\.72;/.test(src));
+ok('the header says "Name\'s turn" and pulses on each new turn', /'\\u2019s turn<\/span>'/.test(src) && /#cturn\.new\{animation:turnPulse/.test(src));
 
 console.log('\n[L30] the fight\'s list has its own name (v4.9)');
 // It shared the id "roster" with the party-making screen, so the fight wrote
