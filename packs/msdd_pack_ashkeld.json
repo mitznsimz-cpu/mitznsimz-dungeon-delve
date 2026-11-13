@@ -1506,6 +1506,60 @@
       "cursed": true,
       "unknown": "Heavy grey ring",
       "desc": "Cursed. −2 defence, and it will not come off until Mitz lifts the curse."
+    },
+    "it.spear": {
+      "id": "it.spear",
+      "name": "Spear",
+      "slot": "weapon",
+      "tags": [
+        "weapon.blade",
+        "weapon.polearm"
+      ],
+      "damage": [
+        1,
+        6,
+        0
+      ],
+      "value": 30,
+      "reach": "melee",
+      "desc": "Deals 1d6. A polearm: in a narrow passage, or from the back rank, it reaches past the two in front (at −1 to hit).",
+      "shopFrom": 1
+    },
+    "it.lucerne": {
+      "id": "it.lucerne",
+      "name": "Lucerne Hammer",
+      "slot": "weapon",
+      "tags": [
+        "weapon.blunt",
+        "weapon.polearm"
+      ],
+      "damage": [
+        1,
+        8,
+        0
+      ],
+      "value": 90,
+      "reach": "melee",
+      "desc": "Deals 1d8. A blunt polearm, so a priest may use it, and it reaches past the two in front (at −1 to hit).",
+      "shopFrom": 2
+    },
+    "it.halberd": {
+      "id": "it.halberd",
+      "name": "Halberd",
+      "slot": "weapon",
+      "tags": [
+        "weapon.blade",
+        "weapon.polearm"
+      ],
+      "damage": [
+        1,
+        10,
+        1
+      ],
+      "value": 150,
+      "reach": "melee",
+      "desc": "Deals 1d10+1. Axe, hook and spike on a long haft; it reaches past the two in front (at −1 to hit).",
+      "shopFrom": 3
     }
   },
   "monsters": {
@@ -4418,6 +4472,9 @@
     "it.warhammer",
     "it.flail",
     "it.greatsword",
+    "it.spear",
+    "it.lucerne",
+    "it.halberd",
     "it.sling",
     "it.shortbow",
     "it.longbow",

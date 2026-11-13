@@ -193,7 +193,11 @@ unreachable for `duration` rounds, and their next blow `toHit` more likely.
 ## Classes
 
 A class says what it is called, its dice, its spell and skill lists, what it
-may carry (`allowedTags`) and the least stats it needs (`minStats`). v4.9 adds:
+may carry (`allowedTags`) and the least stats it needs (`minStats`). A weapon
+tagged `weapon.polearm` as well (v6.1.6) reaches past the two in front: in a
+passage it strikes from third place, and anywhere it strikes from the back
+rank, at −1 to hit. Tag it blade or blunt too, so the classes that may carry it
+are clear. v4.9 adds:
 
 - `traps: { spot, disarm, passive }` — `spot` (0 to 3) helps find traps,
   `disarm` (0 to 0.6) adds to the chance of disarming one, and `passive` means

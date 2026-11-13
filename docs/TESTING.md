@@ -297,7 +297,13 @@ threat line moves up into the header, and the position readout is hidden.
 fold: Attack and Defend stay on screen, and Spells, Skills and More (change
 rank, use an item, flee) open a menu over the stage. Spells and Skills show how
 many are ready (3/3). The menu closes when an action is chosen or the turn
-passes. Wider screens keep every action on show. Hanging chains in
+passes. Wider screens keep every action on show.
+(v6.1.6) In a passage only two stand abreast (one in a doorway), so a third hero
+in front sees *Attack · no room in the passage*. Polearms answer that: the
+Spear (Fighter, 1d6, from floor 1), the Lucerne Hammer (Fighter or Priest, 1d8,
+blunt, floor 2) and the Halberd (Fighter, 1d10+1, floor 3) strike past the two in
+front, or from the back rank anywhere, at −1 to hit. The combat runner's C18
+covers it (12 checks). Hanging chains in
 3D are now interlocking links from a ceiling staple, one to three to a wall,
 some ending in an open manacle or a hook.
 

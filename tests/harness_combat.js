@@ -17,7 +17,7 @@ const names = ['isFront','frontRank','backRank','foeFront','foeBack','meleeTarge
   'beginCombat','partyAction','foeTurns','advanceCombat','finishCombat','activeActor','livingFoes',
   'attackRoll','reviveAfterWipe','threatTriggers','describeFoes','foesBlockLine','makeGroup','setMonsterScale','currentMonsterScale','scaleFoe','scaleGroupSize','wasStruck','advanceCombat','activeActor','normalisePositions','startingKit','grantStartingSpells',
   'makeRng','makeParty','makeCharacter','maxBP','maxMP','partyDown','applyDamage','canLevel','levelUp',
-  'oneFoeTurn','attacksThisTurn','fitPools','surpriseChance','partyFirst','bossTell','bossUnleash','TELL','SURPRISE','engagedParty','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
+  'oneFoeTurn','attacksThisTurn','fitPools','surpriseChance','partyFirst','bossTell','bossUnleash','TELL','SURPRISE','engagedParty','hasPolearm','meleeReach','POLEARM_FROM_BEHIND','canUse','ITEMS','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
 const C = new Function(BOOT + grab('PARTY CORE') + '\n' + grab('SAVE CORE') + '\n' + grab('WORLD CORE') + '\n' + grab('EVENT CORE') + '\n' + grab('COMBAT CORE') + '\n' + grab('TOWN CORE') + '\n' + grab('INVENTORY CORE') +
   '\nreturn {' + names.join(',') + '};')();
 
@@ -630,6 +630,45 @@ console.log('\n[C17] a boss winds up a round early, and can be braced for or sta
   ok('grit in its eyes staggers it too', /staggers/.test(C.bossUnleash(p, st, rg)[0].text));
   ok('Defend braces, in the rules', /action === 'defend'\) \{\s*ch\.defBonus = 2;\s*ch\.braced = st\.round;/.test(src));
   ok('the wind-up shows on the fight screen', /f\.windup \? ' \\u00b7 <b class="tell">winding up<\/b>'/.test(src) && /tellMark\(g, x, ground, hgt\)/.test(src));
+}
+
+console.log('\n[C18] polearms reach past the two in front (v6.1.6)');
+{
+  const P = () => { const p = C.makeParty(C.makeRng(3), [{name:'A',class:'fighter'},{name:'B',class:'fighter'},{name:'C',class:'fighter'},{name:'D',class:'priest'}]);
+    p.forEach((c, k) => { c.rank = k < 3 ? 'front' : 'back'; c.position = k; c.equipped.weapon = C.makeItem('it.club'); }); return p; };
+  const narrow = { narrow: true }, door = { narrow: true, abreast: 1 };
+  const foes = () => C.makeEncounter('mn.goblin', C.makeRng(9));
+  let p = P(), st = C.beginCombat(p, foes(), C.makeRng(1), narrow);
+  ok('in a passage the third in front has no room with a club', !C.meleeReach(p, st, p[2]).ok);
+  p[2].equipped.weapon = C.makeItem('it.spear');
+  let r = C.meleeReach(p, st, p[2]);
+  ok('with a spear the third reaches past, from behind', r.ok && r.behind);
+  ok('the two in front reach as ever', C.meleeReach(p, st, p[0]).ok && !C.meleeReach(p, st, p[0]).behind);
+  ok('a club in the back rank does not reach', !C.meleeReach(p, st, p[3]).ok);
+  p[3].equipped.weapon = C.makeItem('it.lucerne');
+  ok('a lucerne hammer in the back rank does', C.meleeReach(p, st, p[3]).ok);
+  ok('in a doorway the spear still reaches past the one', (() => { const q = P(); q[1].equipped.weapon = C.makeItem('it.spear');
+    const s2 = C.beginCombat(q, foes(), C.makeRng(1), door); return !C.meleeReach(q, s2, q[2]).ok && C.meleeReach(q, s2, q[1]).ok; })());
+  ok('reaching from behind costs to hit', C.POLEARM_FROM_BEHIND < 0);
+  // a whole swing from the third place lands in the log, not refused
+  let swung = 0, refused = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    const q = P(); q[2].equipped.weapon = C.makeItem('it.spear');
+    const s3 = C.beginCombat(q, foes(), C.makeRng(seed), narrow);
+    for (let g = 0; g < 30 && !s3.outcome; g++) {
+      const i = C.activeActor(s3);
+      if (i === null) { C.advanceCombat(q, s3, C.makeRng(seed + g)); continue; }
+      const ev = C.partyAction(q, s3, i === 2 ? 'attack' : 'defend', 0, C.makeRng(seed * 7 + g));
+      if (i === 2) { if (ev.some(e => /reaches past/.test(e.text || ''))) swung++; if (ev.some(e => /No room/.test(e.text || ''))) refused++; break; }
+    }
+  }
+  ok('the spear swings from the third place, never refused', swung > 0 && refused === 0, swung + ' swung, ' + refused + ' refused');
+  const pr = P()[3], fg = P()[0];
+  const rogue = C.makeParty(C.makeRng(4), [{name:'R',class:'rogue'}])[0];
+  ok('a priest may carry the blunt lucerne hammer, not the spear', C.canUse(pr, C.makeItem('it.lucerne')) && !C.canUse(pr, C.makeItem('it.spear')));
+  ok('a fighter may carry all three', ['it.spear','it.lucerne','it.halberd'].every(k => C.canUse(fg, C.makeItem(k))));
+  ok('a rogue carries none of them', ['it.spear','it.lucerne','it.halberd'].every(k => !C.canUse(rogue, C.makeItem(k))));
+  ok('all three are polearms', ['it.spear','it.lucerne','it.halberd'].every(k => C.hasPolearm({ equipped: { weapon: C.makeItem(k) } })));
 }
 
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
