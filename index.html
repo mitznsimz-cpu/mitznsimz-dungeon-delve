@@ -682,9 +682,9 @@
   <fieldset><legend>Floor size</legend><div class="dsOpts" id="dsSize"></div></fieldset>
   <fieldset><legend>How deep</legend><div class="dsOpts" id="dsFloors"></div></fieldset>
   <fieldset><legend>Seed <small>optional</small></legend>
-    <div class="dsSeed"><input id="dsSeed" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="10" placeholder="Random" autocomplete="off" aria-describedby="dsSeedHelp">
+    <div class="dsSeed"><input id="dsSeed" type="text" maxlength="40" placeholder="Random" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="dsSeedHelp">
     <button type="button" id="dsDice" title="Roll a random seed">Roll</button></div>
-    <p id="dsSeedHelp">The same seed builds the same dungeon. Leave it blank for a new one, or share yours with a friend.</p>
+    <p id="dsSeedHelp">A number or a few words: the same seed builds the same dungeon, so share yours with a friend. Leave it blank for a new one.</p>
   </fieldset>
   <p id="dsErr" class="err" role="alert"></p>
   <div class="acts"><button type="button" id="dsCancel">Cancel</button><button type="submit" id="dsGo" class="primary">Begin the delve</button></div>
@@ -12287,10 +12287,22 @@ function readDelveSetup(sizeName, floors, seedText, allowEndless) {
   if (!endless && !(n >= 1 && n <= 40)) return { ok: false, why: 'Choose how many floors.' };
   var t = String(seedText || '').trim(), seed = null;
   if (t !== '') {
-    if (!/^\d{1,10}$/.test(t)) return { ok: false, why: 'A seed is a whole number, digits only.' };
-    seed = parseInt(t, 10) >>> 0;
+    if (t.length > 40) return { ok: false, why: 'Keep a seed to 40 characters.' };
+    seed = seedFromText(t);
   }
-  return { ok: true, size: sizeName, floors: n, endless: endless, seed: seed };
+  return { ok: true, size: sizeName, floors: n, endless: endless, seed: seed, seedText: t || null };
+}
+/* v6.1.9: a seed may be a number or words. A number is itself; words become
+   a number the same way every time (FNV-1a over the lower-cased letters, with
+   runs of spaces made one), so "Goblin King" and "goblin  king" build the
+   same dungeon, and a friend typing it gets yours. */
+function seedFromText(t) {
+  t = String(t).trim();
+  if (/^\d{1,10}$/.test(t)) return parseInt(t, 10) >>> 0;
+  t = t.toLowerCase().replace(/\s+/g, ' ');
+  var h = 0x811c9dc5;
+  for (var i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
 }
 var DELVE_SETUP = null;      // { allowEndless, onStart }
 function openDelveSetup(opts) {
@@ -12342,15 +12354,18 @@ document.getElementById('dsDice').addEventListener('click', function () {
   document.getElementById('dsSeed').value = String(Math.floor(Math.random() * 1e9));
   document.getElementById('dsErr').textContent = '';
 });
-document.getElementById('dsSeed').addEventListener('input', function () {
-  var el = this, v = el.value.replace(/\D+/g, '').slice(0, 10);
-  if (v !== el.value) el.value = v;
-});
 document.getElementById('delveSetup').addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDelveSetup(); });
 
 function promptDelve() {
   openDelveSetup({ allowEndless: true, onStart: function (r) {
-    if (startEndless(r.seed, r.floors, r.size, r.endless)) document.getElementById('chooser').classList.remove('on');
+    if (startEndless(r.seed, r.floors, r.size, r.endless)) {
+      document.getElementById('chooser').classList.remove('on');
+      if (r.seedText && !/^\d+$/.test(r.seedText) && PACK && PACK.generated) {
+        PACK.generated.seedText = r.seedText;          // shown on the party screen, to share
+        var bw = document.getElementById('beginWhy');
+        if (bw) bw.textContent = bw.textContent.replace('seed ' + PACK.generated.seed, 'seed \u201c' + r.seedText + '\u201d (' + PACK.generated.seed + ')');
+      }
+    }
   } });
 }
 

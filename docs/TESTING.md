@@ -307,9 +307,13 @@ covers it (12 checks).
 (v6.1.7) The Endless Delve no longer asks in browser prompts. A setup panel
 offers the floor size as six buttons (Small 12 × 12 to Immense 40 × 40), the
 depth as 3, 5, 8 or 12 floors or Endless, and an optional seed: a numeric box
-(the phone shows a number pad) with a Roll button. Choices are remembered for
+with a Roll button. Choices are remembered for
 next time. The developer panel's *New delve* uses the same panel without
-Endless. The bot fills the panel in, and treats any browser dialog as a fault. Hanging chains in
+Endless. The bot fills the panel in, and treats any browser dialog as a fault.
+(v6.1.9) A seed may be a number or a few words (up to 40 characters). Words
+become a number the same way every time, ignoring case and extra spaces, so
+"Goblin King" builds the same dungeon for anyone who types it. The party
+screen shows the words with the number they made. Hanging chains in
 3D are now interlocking links from a ceiling staple, one to three to a wall,
 some ending in an open manacle or a hook.
 

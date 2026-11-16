@@ -145,13 +145,21 @@ console.log('\n[U9] the Endless Delve is set up by choosing, not typing (v6.1.7)
   const m = src.match(/var DELVE_DEPTHS[\s\S]*?\nfunction readDelveSetup[\s\S]*?\n}\n/);
   ok('the setup rules are on the page', !!m);
   const gs = src.match(/var GEN_SIZES = \{[\s\S]*?\n\};\n\nfunction genSizeNames\(\) \{[^}]*\}/)[0];
-  const D = new Function(gs + '\n' + m[0] + '\nreturn { readDelveSetup, DELVE_DEPTHS, genSizeNames };')();
+  const sf = src.match(/function seedFromText\(t\) \{[\s\S]*?\n\}\n/)[0];
+  const D = new Function(gs + '\n' + m[0] + '\n' + sf + '\nreturn { readDelveSetup, DELVE_DEPTHS, genSizeNames, seedFromText };')();
   let r = D.readDelveSetup('medium', 'endless', '', true);
   ok('endless, any size, no seed', r.ok && r.endless && r.seed === null && r.size === 'medium');
   r = D.readDelveSetup('large', '8', ' 4242 ', true);
   ok('eight large floors, seed 4242', r.ok && !r.endless && r.floors === 8 && r.seed === 4242);
-  ok('a seed of letters is refused', !D.readDelveSetup('small', '3', '12ab', true).ok);
-  ok('a negative seed is refused', !D.readDelveSetup('small', '3', '-5', true).ok);
+  // v6.1.9: words are seeds too, the same words always the same dungeon
+  const w = D.readDelveSetup('small', '3', 'Goblin King', true);
+  ok('words make a seed', w.ok && typeof w.seed === 'number' && w.seed > 0 && w.seedText === 'Goblin King');
+  ok('the same words, the same seed, whatever the case or spacing',
+     D.seedFromText('Goblin King') === D.seedFromText('  goblin   KING ') && D.seedFromText('goblin king') === w.seed);
+  ok('different words, different seeds', D.seedFromText('goblin king') !== D.seedFromText('goblin queen'));
+  ok('a number is still itself', D.seedFromText('4242') === 4242 && D.readDelveSetup('small', '3', '4242', true).seed === 4242);
+  ok('letters and digits together are words, not a number cut short', D.seedFromText('12ab') !== 12);
+  ok('a seed past 40 characters is refused', !D.readDelveSetup('small', '3', 'x'.repeat(41), true).ok);
   ok('an unknown size is refused', !D.readDelveSetup('gigantic', '3', '', true).ok);
   ok('no size chosen is refused', !D.readDelveSetup(null, '3', '', true).ok);
   ok('endless is refused where it is not offered', !D.readDelveSetup('small', 'endless', '', false).ok);
@@ -160,7 +168,7 @@ console.log('\n[U9] the Endless Delve is set up by choosing, not typing (v6.1.7)
   ok('a ten-digit seed folds into range', D.readDelveSetup('small', '3', '9999999999', true).seed === (9999999999 >>> 0));
   ok('the game opens no browser prompts', !/\bprompt\(/.test(src.replace(/var BUNDLED_PACK = .*\n/, '')));
   ok('the panel is on the page, with radio groups and a numeric seed',
-     /<div id="delveSetup"/.test(src) && /setAttribute\('role', 'radio'\)/.test(src) && /id="dsSeed" type="text" inputmode="numeric"/.test(src));
+     /<div id="delveSetup"/.test(src) && /setAttribute\('role', 'radio'\)/.test(src) && /id="dsSeed" type="text" maxlength="40"/.test(src));
 }
 
 console.log('\n' + (fail ? 'FAILED' : 'PASSED') + ' \u2014 ' + pass + ' passed, ' + fail + ' failed');
