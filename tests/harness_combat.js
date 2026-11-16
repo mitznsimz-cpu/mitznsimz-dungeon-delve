@@ -671,5 +671,10 @@ console.log('\n[C18] polearms reach past the two in front (v6.1.6)');
   ok('all three are polearms', ['it.spear','it.lucerne','it.halberd'].every(k => C.hasPolearm({ equipped: { weapon: C.makeItem(k) } })));
 }
 
+console.log('\n[C19] Space or Enter carries on after a fight (v6.1.8)');
+ok('the Carry on button can be found', /co\.id = 'carryOn'/.test(src));
+ok('Space and Enter press it once the fight is over', /\(k === ' ' \|\| k === 'enter'\) && cst && cst\.outcome/.test(src) && /co\.click\(\)/.test(src));
+ok('a held key does not skip past the next screen', /!e\.repeat\) co\.click\(\)/.test(src));
+
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);

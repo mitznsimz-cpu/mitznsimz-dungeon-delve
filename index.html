@@ -11261,7 +11261,9 @@ function renderActions() {
   host.classList.toggle('folded', phone && !cst.outcome);
 
   if (cst.outcome) {
-    mk(cst.outcome === 'lost' ? 'Wake in the dark\u2026' : 'Carry on', endCombat, true);
+    var co = mk(cst.outcome === 'lost' ? 'Wake in the dark\u2026' : 'Carry on', endCombat, true);
+    co.id = 'carryOn';
+    co.title = 'Space or Enter';
     return;
   }
 
@@ -16460,6 +16462,13 @@ addEventListener('keydown', function (e) {
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
   if (aboutOpen()) { if (e.key === 'Escape') { closeAbout(); e.preventDefault(); } return; }
   var k = e.key.toLowerCase();
+  // v6.1.8: when a fight is over, Space or Enter carries on
+  if ((k === ' ' || k === 'enter') && cst && cst.outcome) {
+    var co = document.getElementById('carryOn');
+    if (co && !co.disabled && co.offsetParent !== null && !e.repeat) co.click();
+    e.preventDefault();
+    return;
+  }
   if (k === 'm') {
     setSound(!PREFS.sound);
     say('Sound ' + (PREFS.sound ? 'on.' : 'off.'));
