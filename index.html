@@ -6497,6 +6497,16 @@ function reviveAfterWipe(party, gold, rules) {
 }
 
 /* Threat -> encounter check. Pure: caller supplies threat and rng. */
+/* v6.1.10: how much a fight's end calms the floor. In a generated delve only
+   beating (or escaping) a wandering monster does: the monsters placed on the
+   map used to take 60 off each, so small floors never saw a wanderer at all.
+   Written adventures keep their tuning. */
+function threatAfterFight(threat, outcome, wanderer, delve, cfg) {
+  cfg = cfg || {};
+  var cut = outcome === 'won' ? (cfg.perCombatWon || 0) : (cfg.perFlee || 0);
+  if (delve && !wanderer) cut = 0;
+  return Math.max(0, threat - cut);
+}
 function threatTriggers(threat, rng, cfg) {
   var at = (cfg && cfg.triggerAt) || 100;
   var jitter = (cfg && cfg.jitter) || 15;
@@ -11518,6 +11528,7 @@ function startCombat(monsterId, group, opts) {
   sfx('dice', 0.7);
   cst = beginCombat(party, foes, actionRng, combatGround(floor, pos.x, pos.y, clearedHere()),
                     { careful: carefulSteps > 0 });
+  cst.wanderer = !!opts.wanderer;                  // v6.1.10: only these calm a delve's floor
   carefulSteps = 0;
   if (ally) {
     cst.ally = { name: ally.name, dice: ally.dice, toHit: ally.toHit };
@@ -11577,7 +11588,7 @@ function endCombat() {
     gold += g;
     runNote('gold', g);
     if (g > 0) sfx('coin');
-    threat = Math.max(0, threat - RULES.threat.perCombatWon);
+    threat = threatAfterFight(threat, 'won', cst.wanderer, !!(PACK && PACK.generated), RULES.threat);
     var ready = party.filter(canLevel).map(function (c) { return c.name; });
     if (ready.length) hint('train');
     if (party.some(function (c) { return c.bp > 0 && c.bp < maxBP(c) * 0.5; })) hint('rest');
@@ -11586,7 +11597,7 @@ function endCombat() {
         ' learned enough \u2014 Mitz can train them.'
       : g + ' gold from the bodies.');
   } else {
-    threat = Math.max(0, threat - RULES.threat.perFlee);
+    threat = threatAfterFight(threat, 'fled', cst.wanderer, !!(PACK && PACK.generated), RULES.threat);
   }
   PENDING_LOOT = null;
   cst = null;
@@ -13199,7 +13210,7 @@ function campRest() {
     say('You bed down. Something finds you before you are warm.', null, 'bad');
     sfx('horn', 0.6);
     renderParty(); redraw();
-    soon(function () { startCombat(pickEncounter(floor, actionRng, encounterHere())); }, 400);
+    soon(function () { startCombat(pickEncounter(floor, actionRng, encounterHere()), null, { wanderer: true }); }, 400);
     return true;
   }
 
@@ -16338,7 +16349,7 @@ function step(dir, sliding) {
   if (threatTriggers(threat, actionRng, RULES.threat)) {
     threat = 0;
     redraw();
-    soon(function () { startCombat(feat && feat.ref ? feat.ref : pickEncounter(floor, actionRng, encounterHere())); }, 400);
+    soon(function () { startCombat(feat && feat.ref ? feat.ref : pickEncounter(floor, actionRng, encounterHere()), null, { wanderer: true }); }, 400);
     return;
   }
 

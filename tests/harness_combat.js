@@ -17,7 +17,7 @@ const names = ['isFront','frontRank','backRank','foeFront','foeBack','meleeTarge
   'beginCombat','partyAction','foeTurns','advanceCombat','finishCombat','activeActor','livingFoes',
   'attackRoll','reviveAfterWipe','threatTriggers','describeFoes','foesBlockLine','makeGroup','setMonsterScale','currentMonsterScale','scaleFoe','scaleGroupSize','wasStruck','advanceCombat','activeActor','normalisePositions','startingKit','grantStartingSpells',
   'makeRng','makeParty','makeCharacter','maxBP','maxMP','partyDown','applyDamage','canLevel','levelUp',
-  'oneFoeTurn','attacksThisTurn','fitPools','surpriseChance','partyFirst','bossTell','bossUnleash','TELL','SURPRISE','engagedParty','hasPolearm','meleeReach','POLEARM_FROM_BEHIND','canUse','ITEMS','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
+  'oneFoeTurn','attacksThisTurn','fitPools','surpriseChance','partyFirst','bossTell','bossUnleash','TELL','SURPRISE','engagedParty','threatAfterFight','hasPolearm','meleeReach','POLEARM_FROM_BEHIND','canUse','ITEMS','makeItem','useItem','anyTargets','letterFoe','spawnerTurn','MONSTERS'];
 const C = new Function(BOOT + grab('PARTY CORE') + '\n' + grab('SAVE CORE') + '\n' + grab('WORLD CORE') + '\n' + grab('EVENT CORE') + '\n' + grab('COMBAT CORE') + '\n' + grab('TOWN CORE') + '\n' + grab('INVENTORY CORE') +
   '\nreturn {' + names.join(',') + '};')();
 
@@ -675,6 +675,18 @@ console.log('\n[C19] Space or Enter carries on after a fight (v6.1.8)');
 ok('the Carry on button can be found', /co\.id = 'carryOn'/.test(src));
 ok('Space and Enter press it once the fight is over', /\(k === ' ' \|\| k === 'enter'\) && cst && cst\.outcome/.test(src) && /co\.click\(\)/.test(src));
 ok('a held key does not skip past the next screen', /!e\.repeat\) co\.click\(\)/.test(src));
+
+console.log('\n[C20] in a delve only wandering monsters calm the floor (v6.1.10)');
+{
+  const R = { perCombatWon: 60, perFlee: 25 };
+  ok('a placed monster beaten in a delve leaves the threat where it was', C.threatAfterFight(70, 'won', false, true, R) === 70);
+  ok('a placed monster fled from in a delve, the same', C.threatAfterFight(70, 'fled', false, true, R) === 70);
+  ok('a wanderer beaten in a delve takes 60 off', C.threatAfterFight(70, 'won', true, true, R) === 10);
+  ok('a wanderer escaped takes 25 off', C.threatAfterFight(70, 'fled', true, true, R) === 45);
+  ok('a written adventure keeps its tuning: any win takes 60 off', C.threatAfterFight(70, 'won', false, false, R) === 10);
+  ok('never below nothing', C.threatAfterFight(20, 'won', true, true, R) === 0);
+  ok('the page marks wandering fights', /cst\.wanderer = !!opts\.wanderer/.test(src) && (src.match(/\{ wanderer: true \}/g) || []).length >= 2);
+}
 
 console.log('\n' + (fail?'FAILED':'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed\n');
 process.exit(fail?1:0);

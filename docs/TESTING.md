@@ -313,7 +313,15 @@ Endless. The bot fills the panel in, and treats any browser dialog as a fault.
 (v6.1.9) A seed may be a number or a few words (up to 40 characters). Words
 become a number the same way every time, ignoring case and extra spaces, so
 "Goblin King" builds the same dungeon for anyone who types it. The party
-screen shows the words with the number they made. Hanging chains in
+screen shows the words with the number they made.
+(v6.1.10) Two fixes. In 3D with shadows on, standing on a staircase (above all
+arriving on the next floor's up stairs) blacked out the view: the steps
+round the torch cast shadow every way. The stair underfoot is now left out of
+the shadows as it is of the picture. And in a generated delve only beating or
+escaping a *wandering* monster lowers the threat; the placed ones used to take
+60 off each, so small floors never saw a wanderer. Now a full exploration
+meets about one wanderer on a small floor, two on a medium and four or five on
+a large. Written adventures keep their tuning. Checks: combat C20, view3d V6. Hanging chains in
 3D are now interlocking links from a ceiling staple, one to three to a wall,
 some ending in an open manacle or a hook.
 

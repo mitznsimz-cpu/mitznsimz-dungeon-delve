@@ -629,7 +629,9 @@
         gl.uniformMatrix4fv(SH.U.uModel, false, IDENT); gl.uniform1f(SH.U.uAlpha, 0);
         CASTERS.forEach(function (n) { if (meshes[n]) meshes[n].draw(); });
         doorMeshes.forEach(function (dm) { dm.mesh.draw(); });
-        stairMeshes.forEach(function (dm) { dm.mesh.draw(); });
+        // v6.1.10: the stair you stand on is not drawn, so it casts no shadow either:
+        // its steps round the torch blacked out the whole view
+        stairMeshes.forEach(function (dm) { if (dm.key !== stairHere) dm.mesh.draw(); });
         gl.uniform1f(SH.U.uAlpha, 0.45); gl.activeTexture(gl.TEXTURE0);
         figures.forEach(function (m) { if (!m.mini) return; gl.uniformMatrix4fv(SH.U.uModel, false, modelOf(m)); gl.bindTexture(gl.TEXTURE_2D, m.mini.tex); m.mini.front.draw(); });
       }
@@ -656,7 +658,7 @@
     /* ---- the floor, as built ---- */
     var baker = new M.Baker(gl, opts.atlasImg || null, opts.atlasIndex || {});
     var lidM = null, bandM = null, coinM = null;
-    var F = null, zoneKey = 'damp', Z = M.ZONES.damp, hooks = {}, meshes = {}, doorMeshes = [], stairMeshes = [], figures = [], lamps = [], lids = [], fixtures = [], mats = {}, sig = '', shadowStale = true;
+    var F = null, zoneKey = 'damp', Z = M.ZONES.damp, hooks = {}, meshes = {}, doorMeshes = [], stairMeshes = [], stairHere = '', figures = [], lamps = [], lids = [], fixtures = [], mats = {}, sig = '', shadowStale = true;
     function lin(h, k) { return M.hex(h).map(function (v) { return Math.pow(v, 2.2) * (k || 1); }); }
     function scale(hexc, k) { return '#' + M.hex(hexc).map(function (v) { var n = Math.round(Math.min(1, v * k) * 255); return (n < 16 ? '0' : '') + n.toString(16); }).join(''); }
 
@@ -728,6 +730,12 @@
           if (m.yaw == null || calm) m.yaw = want;
           else { var dlt = ((want - m.yaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI; m.yaw += dlt * Math.min(1, (cam.dt || 0.016) * 6); if (Math.abs(dlt) > 0.002) shadowStale = true; }
         });
+        var hereNow = cam.px + ',' + cam.pz;
+        if (hereNow !== stairHere) {                              // stepping on or off a stair redoes the shadows
+          var onStairs = stairMeshes.some(function (d) { return d.key === hereNow || d.key === stairHere; });
+          stairHere = hereNow;
+          if (onStairs) { shadowStale = true; Object.keys(lampShadow).forEach(function (k) { lampShadow[k].stale = true; }); }
+        }
         if (shadows) {
           near.slice(0, 2).forEach(function (n) {
             var c = lampShadow[n.id];

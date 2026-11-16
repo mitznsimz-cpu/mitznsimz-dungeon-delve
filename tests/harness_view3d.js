@@ -115,5 +115,12 @@ console.log('\n[V5] the game hands over to it, and falls back without it');
      .every(h => src.indexOf('    ' + h) >= 0));
 }
 
+console.log('\n[V6] the stair you stand on casts no shadow (v6.1.10)');
+{
+  const V = fs.readFileSync('./msdd_view3d.js', 'utf8');
+  ok('the shadow pass leaves out the stair underfoot', /stairMeshes\.forEach\(function \(dm\) \{ if \(dm\.key !== stairHere\) dm\.mesh\.draw\(\); \}\)/.test(V));
+  ok('stepping on or off a stair redoes the shadows', /if \(hereNow !== stairHere\)/.test(V) && /lampShadow\[k\]\.stale = true/.test(V));
+}
+
 console.log('\n' + (fail ? 'FAILED' : 'PASSED') + ' \u2014 ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
