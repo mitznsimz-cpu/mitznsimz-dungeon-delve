@@ -91,6 +91,7 @@ const PAGE = function () {
     if (on('evt')) return 'evt';
     if (on('combat')) return 'combat';
     if (on('town')) return 'town';
+    if (on('delveSetup')) return 'delvesetup';
     if (on('chooser')) return 'chooser';
     if (on('roster')) return 'roster';
     return 'explore';
@@ -138,6 +139,8 @@ const PAGE = function () {
     }
     if (s === 'victory') return { do: 'click', sel: '#vicContinue', why: 'won: keep exploring', won: true };
 
+    // v6.1.7: the Endless Delve's setup panel; the run fills it in (it knows the seed)
+    if (s === 'delvesetup') return { do: 'setup', why: 'set up the delve' };
     if (s === 'chooser') {
       var opts = Array.from(document.querySelectorAll('#chooseList .advOpt'));
       var want = r.mode === 'endless' ? /Endless Delve/ : null;
@@ -381,13 +384,8 @@ async function playRun(browser, n, mode, motion) {
   const fault = (kind, detail) => { if (faults.some(f => f.kind === kind && f.detail === detail)) return; faults.push({ kind, detail, tick }); };
   page.on('pageerror', e => fault('page-error', e.message));
   page.on('console', m => { if (m.type() === 'error' && !/favicon|ERR_FILE_NOT_FOUND/.test(m.text())) fault('page-error', 'console: ' + m.text()); });
-  // the Endless Delve asks three things: a seed, a size, how many floors
-  page.on('dialog', d => {
-    const m = d.message();
-    if (/size/i.test(m)) return d.accept(['small', 'medium', 'large'][seed % 3]);
-    if (/floors/i.test(m)) return d.accept(META || seed % 2 ? 'endless' : '4');
-    return d.accept(String(seed));
-  });
+  // the game asks nothing in a browser dialog any more (v6.1.7); one would be a fault
+  page.on('dialog', d => { fault('dialog', 'a browser dialog appeared: ' + d.message()); d.dismiss().catch(() => {}); });
 
   const runEnds = [];
   let tick = 0, won = false, floors = new Set(), fights = 0, wipes = 0, reloads = 0, steps = 0, tells = 0;
@@ -462,6 +460,13 @@ async function playRun(browser, n, mode, motion) {
       if (d.do === 'click') await clickIt(page, d);
       else if (d.do === 'tap') await page.click(d.sel, { timeout: 2000, position: { x: 5, y: 5 } });
       else if (d.do === 'key' || d.do === 'wander') { await page.keyboard.press(d.key); if (d.key === 'ArrowUp') steps++; }
+      else if (d.do === 'setup') {
+        await page.click('#dsSize [data-val="' + ['small', 'medium', 'large'][seed % 3] + '"]');
+        const depth = META || seed % 2 ? 'endless' : '3';
+        await page.click('#dsFloors [data-val="' + depth + '"]');
+        await page.fill('#dsSeed', String(seed));
+        await page.click('#dsGo');
+      }
       else if (d.do === 'none') {}
       missed = 0;
     } catch (e) {

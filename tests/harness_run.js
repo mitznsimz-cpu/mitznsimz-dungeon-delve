@@ -140,5 +140,28 @@ ok('the killing blow is noted where a hero falls', (src.match(/st\.lastDown = \{
 ok('a run in progress is saved', /run: RUN,/.test(src) && /RUN = st\.run \|\| null/.test(src));
 ok('a variant is saved', /variant: c\.variant \|\| null/.test(src) && /if \(r\.variant\) ch\.variant = r\.variant/.test(src));
 
+console.log('\n[U9] the Endless Delve is set up by choosing, not typing (v6.1.7)');
+{
+  const m = src.match(/var DELVE_DEPTHS[\s\S]*?\nfunction readDelveSetup[\s\S]*?\n}\n/);
+  ok('the setup rules are on the page', !!m);
+  const gs = src.match(/var GEN_SIZES = \{[\s\S]*?\n\};\n\nfunction genSizeNames\(\) \{[^}]*\}/)[0];
+  const D = new Function(gs + '\n' + m[0] + '\nreturn { readDelveSetup, DELVE_DEPTHS, genSizeNames };')();
+  let r = D.readDelveSetup('medium', 'endless', '', true);
+  ok('endless, any size, no seed', r.ok && r.endless && r.seed === null && r.size === 'medium');
+  r = D.readDelveSetup('large', '8', ' 4242 ', true);
+  ok('eight large floors, seed 4242', r.ok && !r.endless && r.floors === 8 && r.seed === 4242);
+  ok('a seed of letters is refused', !D.readDelveSetup('small', '3', '12ab', true).ok);
+  ok('a negative seed is refused', !D.readDelveSetup('small', '3', '-5', true).ok);
+  ok('an unknown size is refused', !D.readDelveSetup('gigantic', '3', '', true).ok);
+  ok('no size chosen is refused', !D.readDelveSetup(null, '3', '', true).ok);
+  ok('endless is refused where it is not offered', !D.readDelveSetup('small', 'endless', '', false).ok);
+  ok('every depth offered is accepted', D.DELVE_DEPTHS.every(n => D.readDelveSetup('small', String(n), '', false).ok));
+  ok('every size is accepted', D.genSizeNames().every(k => D.readDelveSetup(k, '3', '', true).ok));
+  ok('a ten-digit seed folds into range', D.readDelveSetup('small', '3', '9999999999', true).seed === (9999999999 >>> 0));
+  ok('the game opens no browser prompts', !/\bprompt\(/.test(src.replace(/var BUNDLED_PACK = .*\n/, '')));
+  ok('the panel is on the page, with radio groups and a numeric seed',
+     /<div id="delveSetup"/.test(src) && /setAttribute\('role', 'radio'\)/.test(src) && /id="dsSeed" type="text" inputmode="numeric"/.test(src));
+}
+
 console.log('\n' + (fail ? 'FAILED' : 'PASSED') + ' \u2014 ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

@@ -113,6 +113,34 @@
   .advOpt .go{font:11px/1 ui-monospace,Menlo,monospace;color:var(--gold);white-space:nowrap}
   .advOpt.current{border-color:var(--gold-dim)}
   .advOpt.current .go{color:var(--text-dim)}
+  /* v6.1.7: the Endless Delve's setup, chosen by tapping, not typed */
+  #delveSetup{position:fixed;inset:0;background:var(--ink);z-index:28;overflow-y:auto;display:none;padding:20px 16px}
+  #delveSetup.on{display:block}
+  #delveSetup .inner{max-width:560px;margin:0 auto}
+  #delveSetup h2{font-size:15px;margin:0 0 4px;color:var(--gold);letter-spacing:.02em}
+  #delveSetup .dsLead{font-size:12px;color:var(--text-dim);margin:0 0 14px;line-height:1.5}
+  #delveSetup fieldset{border:0;padding:0;margin:0 0 16px}
+  #delveSetup legend{font:600 11px/1 ui-monospace,Menlo,monospace;color:var(--gold);letter-spacing:.08em;text-transform:uppercase;padding:0;margin:0 0 8px}
+  #delveSetup legend small{color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400}
+  .dsOpts{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+  #dsFloors{grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}
+  .dsOpts button{min-height:52px;text-align:left;padding:7px 10px;display:flex;flex-direction:column;justify-content:center;gap:2px}
+  .dsOpts button b{font-size:13px;font-weight:600;color:var(--text)}
+  .dsOpts button span{font-size:10.5px;color:var(--text-dim);line-height:1.35}
+  .dsOpts button[aria-checked="true"]{border-color:var(--gold);background:rgba(201,162,74,.09)}
+  .dsOpts button[aria-checked="true"] b{color:var(--gold)}
+  .dsSeed{display:flex;gap:6px}
+  .dsSeed input{flex:1;min-width:0;height:44px;font:15px ui-monospace,Menlo,monospace;letter-spacing:.06em;
+    background:rgba(255,255,255,.03);color:var(--text);border:1px solid var(--line);padding:0 12px;border-radius:0}
+  .dsSeed input:focus{outline:none;border-color:var(--gold)}
+  .dsSeed input::placeholder{color:var(--text-dim)}
+  .dsSeed button{min-width:64px;height:44px;font-size:12px;padding:0 12px}
+  #dsSeedHelp{font-size:11px;color:var(--text-dim);margin:6px 0 0;line-height:1.5}
+  #dsErr{font-size:12px;color:var(--red);min-height:16px;margin:0 0 8px}
+  #delveSetup .acts{display:flex;gap:8px;justify-content:flex-end}
+  #delveSetup .acts button{min-width:120px;height:46px}
+  #delveSetup .acts .primary{border-color:var(--gold);color:var(--gold)}
+  @media (max-width:420px){.dsOpts{grid-template-columns:1fr 1fr}#dsFloors{grid-template-columns:repeat(3,1fr)}#delveSetup .acts button{flex:1}}
   #chooseNotes{font-size:11px;line-height:1.6;color:var(--text-dim);min-height:18px}
   #chooseNotes .err{color:var(--red);display:block}
   #roster .inner{max-width:760px;margin:0 auto;padding-bottom:4px}
@@ -648,6 +676,19 @@
   <div class="acts"><button id="sheetClose">Close</button></div>
 </div></div>
 
+<div id="delveSetup" role="dialog" aria-modal="true" aria-labelledby="dsTitle"><form class="inner" id="dsForm">
+  <h2 id="dsTitle">Endless Delve</h2>
+  <p class="dsLead">A dungeon built fresh for you, proven solvable before you set foot in it.</p>
+  <fieldset><legend>Floor size</legend><div class="dsOpts" id="dsSize"></div></fieldset>
+  <fieldset><legend>How deep</legend><div class="dsOpts" id="dsFloors"></div></fieldset>
+  <fieldset><legend>Seed <small>optional</small></legend>
+    <div class="dsSeed"><input id="dsSeed" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="10" placeholder="Random" autocomplete="off" aria-describedby="dsSeedHelp">
+    <button type="button" id="dsDice" title="Roll a random seed">Roll</button></div>
+    <p id="dsSeedHelp">The same seed builds the same dungeon. Leave it blank for a new one, or share yours with a friend.</p>
+  </fieldset>
+  <p id="dsErr" class="err" role="alert"></p>
+  <div class="acts"><button type="button" id="dsCancel">Cancel</button><button type="submit" id="dsGo" class="primary">Begin the delve</button></div>
+</form></div>
 <div id="chooser" class="on"><div class="inner">
   <h2>Mitz &amp; Simz: Dungeon Delve</h2>
   <p class="lede">Choose where to delve. Whatever you pick is checked before you can enter it.</p>
@@ -12230,27 +12271,85 @@ function startBundled() {
   return true;
 }
 
+/* v6.1.7: the Endless Delve is set up on a panel of choices, not typed into
+   prompts: a size, a depth, and an optional seed. The last choices are kept. */
+var DELVE_DEPTHS = [3, 5, 8, 12];
+var SIZE_BLURB = { small: 'quick, a few rooms', medium: 'the usual', large: 'a long floor',
+                   huge: 'room to get lost', vast: 'old-school big', immense: 'an evening each' };
+/* What the panel's choices mean, checked: pure, so it can be tested. */
+function readDelveSetup(sizeName, floors, seedText, allowEndless) {
+  if (genSizeNames().indexOf(sizeName) < 0) return { ok: false, why: 'Choose a floor size.' };
+  var endless = floors === 'endless';
+  if (endless && !allowEndless) return { ok: false, why: 'Choose how many floors.' };
+  var n = endless ? 3 : parseInt(floors, 10);
+  if (!endless && !(n >= 1 && n <= 40)) return { ok: false, why: 'Choose how many floors.' };
+  var t = String(seedText || '').trim(), seed = null;
+  if (t !== '') {
+    if (!/^\d{1,10}$/.test(t)) return { ok: false, why: 'A seed is a whole number, digits only.' };
+    seed = parseInt(t, 10) >>> 0;
+  }
+  return { ok: true, size: sizeName, floors: n, endless: endless, seed: seed };
+}
+var DELVE_SETUP = null;      // { allowEndless, onStart }
+function openDelveSetup(opts) {
+  DELVE_SETUP = opts || {};
+  var allow = DELVE_SETUP.allowEndless !== false;
+  var size = genSizeNames().indexOf(PREFS.delveSize) >= 0 ? PREFS.delveSize : 'medium';
+  var depth = PREFS.delveFloors || (allow ? 'endless' : '5');
+  if (depth === 'endless' && !allow) depth = '5';
+  var sz = document.getElementById('dsSize'), fl = document.getElementById('dsFloors');
+  sz.innerHTML = ''; fl.innerHTML = '';
+  var radio = function (host, val, label, sub, on) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.val = val;
+    b.setAttribute('aria-checked', on ? 'true' : 'false');
+    b.innerHTML = '<b>' + esc(label) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '');
+    b.addEventListener('click', function () {
+      Array.prototype.forEach.call(host.children, function (x) { x.setAttribute('aria-checked', x === b ? 'true' : 'false'); });
+      document.getElementById('dsErr').textContent = '';
+    });
+    host.appendChild(b);
+  };
+  sz.setAttribute('role', 'radiogroup'); fl.setAttribute('role', 'radiogroup');
+  genSizeNames().forEach(function (k) {
+    var g = GEN_SIZES[k];
+    radio(sz, k, k.charAt(0).toUpperCase() + k.slice(1), g.width + ' \u00d7 ' + g.height + ' \u00b7 ' + (SIZE_BLURB[k] || ''), k === size);
+  });
+  DELVE_DEPTHS.forEach(function (n) { radio(fl, String(n), n + ' floors', n <= 3 ? 'a short one' : n >= 12 ? 'a long haul' : '', String(n) === String(depth)); });
+  if (allow) radio(fl, 'endless', 'Endless', 'until the party falls', depth === 'endless');
+  if (!fl.querySelector('[aria-checked="true"]')) fl.children[1].setAttribute('aria-checked', 'true');
+  document.getElementById('dsSeed').value = '';
+  document.getElementById('dsErr').textContent = '';
+  document.getElementById('delveSetup').classList.add('on');
+  var first = sz.querySelector('[aria-checked="true"]'); if (first) first.focus();
+}
+function closeDelveSetup() { document.getElementById('delveSetup').classList.remove('on'); DELVE_SETUP = null; }
+document.getElementById('dsForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var pick = function (id) { var b = document.querySelector('#' + id + ' [aria-checked="true"]'); return b ? b.dataset.val : null; };
+  var r = readDelveSetup(pick('dsSize'), pick('dsFloors'), document.getElementById('dsSeed').value,
+                         !DELVE_SETUP || DELVE_SETUP.allowEndless !== false);
+  if (!r.ok) { document.getElementById('dsErr').textContent = r.why; return; }
+  PREFS.delveSize = r.size; PREFS.delveFloors = r.endless ? 'endless' : String(r.floors); savePrefs();
+  var go = DELVE_SETUP && DELVE_SETUP.onStart;
+  closeDelveSetup();
+  if (go) go(r);
+});
+document.getElementById('dsCancel').addEventListener('click', closeDelveSetup);
+document.getElementById('dsDice').addEventListener('click', function () {
+  document.getElementById('dsSeed').value = String(Math.floor(Math.random() * 1e9));
+  document.getElementById('dsErr').textContent = '';
+});
+document.getElementById('dsSeed').addEventListener('input', function () {
+  var el = this, v = el.value.replace(/\D+/g, '').slice(0, 10);
+  if (v !== el.value) el.value = v;
+});
+document.getElementById('delveSetup').addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDelveSetup(); });
+
 function promptDelve() {
-  var raw = prompt('Seed for the delve, or blank for a fresh one:', '');
-  if (raw === null) return;
-  var seed = raw.trim() === '' ? null : (parseInt(raw.trim(), 10) >>> 0);
-  if (raw.trim() !== '' && !isFinite(seed)) {
-    chooseNote('<span class="err">That is not a number.</span>'); return;
-  }
-  var sizeRaw = prompt('Floor size \u2014 ' + genSizeNames().join(', ') + '?', 'medium');
-  if (sizeRaw === null) return;
-  var size = (sizeRaw || 'medium').trim().toLowerCase();
-  if (genSizeNames().indexOf(size) < 0) {
-    chooseNote('<span class="err">Unknown size. Choose one of: ' +
-               genSizeNames().join(', ') + '.</span>'); return;
-  }
-  var depthRaw = prompt('How many floors? A number, or "endless".', '5');
-  if (depthRaw === null) return;
-  var endless = /^e/i.test((depthRaw || '').trim());
-  var n = endless ? 3 : Math.max(1, Math.min(40, parseInt(depthRaw, 10) || 5));
-  if (startEndless(seed, n, size, endless)) {
-    document.getElementById('chooser').classList.remove('on');
-  }
+  openDelveSetup({ allowEndless: true, onStart: function (r) {
+    if (startEndless(r.seed, r.floors, r.size, r.endless)) document.getElementById('chooser').classList.remove('on');
+  } });
 }
 
 /* Everything a new adventure has to clear, in one place, so no state from the
@@ -16508,24 +16607,12 @@ document.getElementById('dumpState').addEventListener('click', function () {
 });
 
 document.getElementById('newDelve').addEventListener('click', function () {
-  var raw = prompt('Seed for the delve, or blank for a fresh one:', '');
-  if (raw === null) return;
-  var seed = raw.trim() === '' ? null : (parseInt(raw.trim(), 10) >>> 0);
-  if (raw.trim() !== '' && !isFinite(seed)) { packNote('<span class="err">That is not a number.</span>'); return; }
-  var sizeRaw = prompt('Floor size \u2014 ' + genSizeNames().join(', ') + '?', 'medium');
-  if (sizeRaw === null) return;
-  var size = (sizeRaw || 'medium').trim().toLowerCase();
-  if (genSizeNames().indexOf(size) < 0) {
-    packNote('<span class="err">Unknown size. Choose one of: ' +
-             genSizeNames().join(', ') + '.</span>');
-    return;
-  }
-  var floorsRaw = prompt('How many floors?', '5');
-  var n = Math.max(1, Math.min(12, parseInt(floorsRaw, 10) || 5));
-  if (startEndless(seed, n, size)) {
-    packNote('<span>Generated ' + esc(PACK.name) + ' \u2014 ' + n + ' ' + esc(size) +
-             ' floors, proven solvable before loading.</span>');
-  }
+  openDelveSetup({ allowEndless: false, onStart: function (r) {
+    if (startEndless(r.seed, r.floors, r.size)) {
+      packNote('<span>Generated ' + esc(PACK.name) + ' \u2014 ' + r.floors + ' ' + esc(r.size) +
+               ' floors, proven solvable before loading.</span>');
+    }
+  } });
 });
 
 document.getElementById('dumpFloor').addEventListener('click', function () {

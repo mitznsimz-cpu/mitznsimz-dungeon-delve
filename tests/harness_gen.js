@@ -380,11 +380,10 @@ console.log('\n[G11] it is reachable from the game');
 ok('a start function exists', /function startEndless/.test(src));
 ok('the roster offers a fresh dungeon', /startEndless\(null,/.test(src),
    'there must be a one-tap way to generate one');
-ok('the menu allows a chosen seed', /id="newDelve"/.test(src) && /Seed for the delve/.test(src));
-ok('and a chosen size', /Floor size \\u2014/.test(src));
-ok('an unknown size is rejected with the options listed',
-   /genSizeNames\(\)\.indexOf\(size\) < 0/.test(src) &&
-   /genSizeNames\(\)\.join/.test(src));
+// v6.1.7: the seed and size are chosen on the setup panel, not typed into prompts
+ok('the menu allows a chosen seed', /id="newDelve"/.test(src) && /id="dsSeed"/.test(src) && /openDelveSetup\(\{ allowEndless: false/.test(src));
+ok('and a chosen size, one button for each', /genSizeNames\(\)\.forEach\(function \(k\)/.test(src) && /id="dsSize"/.test(src));
+ok('an unknown size is rejected', /genSizeNames\(\)\.indexOf\(sizeName\) < 0\) return \{ ok: false/.test(src));
 ok('the base pack is kept for content', /function rememberBase/.test(src));
 ok('a failed generation is reported, not swallowed',
    /res\.errors \|\| \['Generation failed\.'\]/.test(src));

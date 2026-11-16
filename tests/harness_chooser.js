@@ -102,11 +102,12 @@ ok('the marker carries an arrow at readable zoom',
    src.indexOf("fillText('\\u2191'") >= 0,
    'an unlabelled dot is not obviously the way out');
 
-ok('the floor count accepts a number or "endless"', /A number, or "endless"/.test(src));
+// v6.1.7: the depth is a choice of buttons, endless among them
+ok('the floor count offers numbers and "endless"', /var DELVE_DEPTHS = \[/.test(src) && /radio\(fl, 'endless', 'Endless'/.test(src));
 ok('a finite run can go much deeper than before', (()=>{
-  const m=src.match(/Math\.min\((\d+), parseInt\(depthRaw/);
-  return m && +m[1] >= 20;})(), 'the old cap was 12');
-ok('"endless" is recognised', /var endless = \/\^e\/i\.test/.test(src));
+  const m=src.match(/var DELVE_DEPTHS = \[([\d, ]+)\]/), cap=src.match(/n >= 1 && n <= (\d+)/);
+  return m && Math.max(...m[1].split(',').map(Number)) >= 12 && cap && +cap[1] >= 20;})(), 'the old cap was 12');
+ok('"endless" is recognised', /var endless = floors === 'endless'/.test(src));
 ok('an endless run starts with a few floors and grows', /endless \? 3 :/.test(src));
 ok('the game builds the next floor when you reach it', /function ensureFloorExists/.test(src));
 ok('it is called before the floor is loaded',
@@ -181,7 +182,8 @@ const coreKb = kb((src.match(/\/\* ==== MINI CORE START ==== \*\/[\s\S]*?\/\* ==
 // v5.3: v5.0 to v5.3 (the play bot's fixes, hints, torchlight, motion and the
 // dressed stone) add about 60 kb, so the budget goes from 700 to 760; the
 // whole file stays well under the roadmap's 2 MB
-ok('the game file is much smaller than it was, not counting the shared minis', kb(src) - coreKb < 760, (kb(src) - coreKb) + ' kb');
+// v6.1 (the run record, the phone layout, the delve setup panel) adds about 15 kb: 760 to 790
+ok('the game file is much smaller than it was, not counting the shared minis', kb(src) - coreKb < 790, (kb(src) - coreKb) + ' kb');
 ok('and the whole file stays under 2 MB', kb(src) < 2048, kb(src) + ' kb');
 ok('and the shared minis keep to their own budget', coreKb < 760, coreKb + ' kb');
 // The shared miniature library is in the game on purpose (above); what the

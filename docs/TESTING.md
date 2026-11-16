@@ -303,7 +303,13 @@ in front sees *Attack · no room in the passage*. Polearms answer that: the
 Spear (Fighter, 1d6, from floor 1), the Lucerne Hammer (Fighter or Priest, 1d8,
 blunt, floor 2) and the Halberd (Fighter, 1d10+1, floor 3) strike past the two in
 front, or from the back rank anywhere, at −1 to hit. The combat runner's C18
-covers it (12 checks). Hanging chains in
+covers it (12 checks).
+(v6.1.7) The Endless Delve no longer asks in browser prompts. A setup panel
+offers the floor size as six buttons (Small 12 × 12 to Immense 40 × 40), the
+depth as 3, 5, 8 or 12 floors or Endless, and an optional seed: a numeric box
+(the phone shows a number pad) with a Roll button. Choices are remembered for
+next time. The developer panel's *New delve* uses the same panel without
+Endless. The bot fills the panel in, and treats any browser dialog as a fault. Hanging chains in
 3D are now interlocking links from a ceiling staple, one to three to a wall,
 some ending in an open manacle or a hook.
 
