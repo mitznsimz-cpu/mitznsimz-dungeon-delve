@@ -486,5 +486,22 @@ console.log('\n[D13] a mix of a mix');
   ok('either way round', hexMix('#ffffff', 'rgb(0, 0, 0)', 0.25) === 'rgb(191,191,191)');
 }
 
+console.log('\n[D-braced] a slip while disarming does half the harm (v6.1.12)');
+{
+  const bpSum = p => p.reduce((a, c) => a + c.bp, 0);
+  let fullHurt = 0, halfHurt = 0;
+  for (let seed = 1; seed <= 40; seed++) {
+    let p = party(4), was = bpSum(p); T.springTrap(p, null, 'fire', T.makeRng(seed), { depth: 3 }); fullHurt += was - bpSum(p);
+    p = party(4); was = bpSum(p); T.springTrap(p, null, 'fire', T.makeRng(seed), { depth: 3, braced: true }); halfHurt += was - bpSum(p);
+  }
+  ok('braced, fire does about half', halfHurt < fullHurt * 0.62 && halfHurt > fullHurt * 0.38, halfHurt + ' of ' + fullHurt);
+  let p = party(4), r = T.springTrap(p, null, 'darts', T.makeRng(3), { depth: 1, braced: true });
+  ok('and says so', /braced for it: half the harm/.test(r.notes.join(' ')), r.notes.join(' '));
+  p = party(4); r = T.springTrap(p, null, 'net', T.makeRng(3), { depth: 1, braced: true });
+  const full = T.springTrap(party(4), null, 'net', T.makeRng(3), { depth: 1 });
+  ok('a net takes half as long to cut free', r.turns < full.turns && r.turns >= 1, r.turns + ' vs ' + full.turns);
+  ok('a slip while disarming is braced', /springHere\(ft, dr\.kind, k, true\)/.test(src));
+}
+
 console.log('\n' + (fail ? 'FAILED' : 'PASSED') + ' — ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

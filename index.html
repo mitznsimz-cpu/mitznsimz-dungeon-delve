@@ -859,7 +859,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v6.1.11</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v6.1.12</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -8692,14 +8692,20 @@ function trapNote(floorDef, key, kind, where) {
 
 /* Spring a trap on the party. Mutates the party (damage, poison, gear) and
    returns what the caller must act on: notes, threat, turns lost, a fight. */
+/* v6.1.12: ctx.braced, a trap set off by a slip while disarming it: whoever
+   was working on it was ready, so it does half the harm (half the damage,
+   half the netting, a better chance to hold breath against gas). */
+var BRACED_TRAP = 0.5;
 function springTrap(party, ft, kind, rng, ctx) {
   ctx = ctx || {};
   var depth = ctx.depth || 1, tk = TRAP_KINDS[kind] || TRAP_KINDS.snare;
+  var half = ctx.braced ? BRACED_TRAP : 1;
   var out = { kind: kind, notes: [], threat: 0, turns: 0, alarm: false, hurt: [] };
   var living = party.filter(function (c) { return c.bp > 0; });
   if (!living.length) return out;
   var pick = function () { return living[Math.floor(rng() * living.length)]; };
   if (ft && ft.text) out.notes.push(ft.text);
+  if (ctx.braced && tk.spring !== 'alarm' && tk.spring !== 'gear') out.notes.push('They were braced for it: half the harm.');
   if (tk.spring === 'gear') {
     var victim = pick();
     var d = typeof damageEquipment === 'function' ? damageEquipment(victim, rng) : null;
@@ -8707,14 +8713,14 @@ function springTrap(party, ft, kind, rng, ctx) {
   } else if (tk.spring === 'darts') {
     var hit = [];
     for (var i = 0; i < tk.hits && living.length; i++) {
-      var c = pick(), dmg = rollDice(rng, tk.dice) + (depth - 1);
+      var c = pick(), dmg = Math.max(1, Math.round((rollDice(rng, tk.dice) + (depth - 1)) * half));
       applyDamage(c, dmg); hit.push(c.name + ' takes ' + dmg); out.hurt.push(c.name);
     }
     out.notes.push('Darts hiss out of the wall: ' + hit.join(', ') + '.');
   } else if (tk.spring === 'gas') {
     var sick = [], held = [];
     living.forEach(function (c) {
-      if (rng() < 0.35 + 0.08 * mod(c.stats.con || 10)) { held.push(c.name); return; }
+      if (rng() < 0.35 + 0.08 * mod(c.stats.con || 10) + (ctx.braced ? 0.3 : 0)) { held.push(c.name); return; }
       if (c.status.indexOf('poisoned') < 0) c.status.push('poisoned');
       sick.push(c.name); out.hurt.push(c.name);
     });
@@ -8724,14 +8730,14 @@ function springTrap(party, ft, kind, rng, ctx) {
   } else if (tk.spring === 'fire') {
     var mult = ctx.fireMult || 1, burnt = [];
     living.forEach(function (c) {
-      var dmg = Math.max(1, Math.round((rollDice(rng, tk.dice) + (depth - 1)) * mult));
+      var dmg = Math.max(1, Math.round((rollDice(rng, tk.dice) + (depth - 1)) * mult * half));
       applyDamage(c, dmg); burnt.push(c.name + ' ' + dmg); out.hurt.push(c.name);
     });
     out.notes.push('Fire roars up out of the floor: ' + burnt.join(', ') + '.' +
                    (mult < 1 ? ' The water takes the worst of it.' : mult > 1 ? ' The coals feed it.' : ''));
   } else if (tk.spring === 'net') {
-    out.turns = tk.turns; out.threat = 6;
-    out.notes.push('A weighted net drops over the party. It takes ' + tk.turns + ' turns to cut free, and it is not quiet.');
+    out.turns = Math.max(1, Math.round(tk.turns * half)); out.threat = 6;
+    out.notes.push('A weighted net drops over the party. It takes ' + out.turns + ' turns to cut free, and it is not quiet.');
   } else if (tk.spring === 'alarm') {
     out.alarm = true; out.threat = 100;
     out.notes.push('A bell clangs somewhere ahead. Something is coming to see.');
@@ -13042,12 +13048,12 @@ function collapseBridge(key) {
 }
 
 /* Spring a trap where the party is: the rules say what it did; this plays it. */
-function springHere(ft, kind, key) {
+function springHere(ft, kind, key, braced) {
   hint('trap');
   if (key && consumed.indexOf(key) < 0) consumed.push(key);
   var terr = terrainAt(floor, pos.x, pos.y, clearedHere());
   var fireMult = terr === 'water' ? 0.5 : terr === 'embers' ? 1.5 : 1;
-  var res = springTrap(party, ft, kind, actionRng, { depth: floor.depth || 1, fireMult: fireMult });
+  var res = springTrap(party, ft, kind, actionRng, { depth: floor.depth || 1, fireMult: fireMult, braced: !!braced });
   ({ snare: function () { sfx('crack'); }, darts: function () { sfx('twang'); sfx('thud', 0.6); },
      gas: function () { sfx('whoosh'); sfx('squish', 0.6); }, fire: function () { sfx('boom'); },
      net: function () { sfx('whoosh', 0.6); sfx('thump'); }, alarm: function () { sfx('chime'); sfx('horn'); } }[kind] || function () {})();
@@ -13180,7 +13186,7 @@ function disarmAhead(k) {
   bumpThreat(2); tickEffects(party, 1); tickLight(1);
   say(dr.notes.join(' '), dr.who ? dr.who.name : null);
   if (dr.ok) { sfx('clack'); sfx('chime', 0.5); awardXp(party, dr.xp); }
-  else if (dr.sprung) springHere(ft, dr.kind, k);
+  else if (dr.sprung) springHere(ft, dr.kind, k, true);          // v6.1.12: a slip, braced: half the harm
   else sfx('clack', 0.4);
   autosave(); redraw();
 }
@@ -13246,7 +13252,7 @@ function useChest(feat, key) {
       bumpThreat(2);
       say(dr.notes.join(' '), dr.who ? dr.who.name : null);
       if (dr.ok) { sfx('clack'); awardXp(party, dr.xp); }
-      else if (dr.sprung) springHere({ text: null }, dr.kind, null);
+      else if (dr.sprung) springHere({ text: null }, dr.kind, null, true);
       else { sfx('clack', 0.4); autosave(); redraw(); return true; }      // try again, or leave it
     } else {
       springHere({ text: null }, feat.trap, null);
