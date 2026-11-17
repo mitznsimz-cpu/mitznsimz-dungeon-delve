@@ -321,7 +321,15 @@ the shadows as it is of the picture. And in a generated delve only beating or
 escaping a *wandering* monster lowers the threat; the placed ones used to take
 60 off each, so small floors never saw a wanderer. Now a full exploration
 meets about one wanderer on a small floor, two on a medium and four or five on
-a large. Written adventures keep their tuning. Checks: combat C20, view3d V6. Hanging chains in
+a large. Written adventures keep their tuning. Checks: combat C20, view3d V6.
+(v6.1.11) After a refresh the adventure chooser offers **Continue** first: the
+delve's floor, its seed (the words, if words made it), the party and when it
+was saved. It used to be only on the party screen, behind the chooser. Word of
+Recall (or a scroll of it) cast below the first floor leaves a portal; in town
+*Through the portal* returns the party to that very square, facing the same
+way, once. It is saved, and a wipe closes it. The offline cache is now
+network-first, so one refresh shows a new release; offline it still loads from
+the cache. Checks: run U10. Hanging chains in
 3D are now interlocking links from a ceiling staple, one to three to a wall,
 some ending in an open manacle or a hook.
 

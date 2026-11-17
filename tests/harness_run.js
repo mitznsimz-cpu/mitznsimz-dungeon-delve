@@ -15,7 +15,7 @@ const BOOT = grab('BUNDLED PACK') + grab('PACK CORE') +
 const names = ['makeRng', 'makeCharacter', 'maxBP', 'maxMP', 'defense', 'meleeToHit', 'varBonus', 'ITEMS',
   'makeItem', 'itemLabel', 'sellValue', 'doIdentify', 'equipItem', 'rollFind', 'gearPool', 'RARITY', 'FIND',
   'VARIANTS', 'UNLOCKS', 'RUN_BONUS_DEPTH', 'STRANGE_ZONES', 'emptyMeta', 'cleanMeta', 'hasUnlock', 'recordRun',
-  'unlockedVariants', 'metaKit', 'delveZones', 'pickZone', 'blowText', 'runLines', 'serialise', 'deserialise', 'CLASSES'];
+  'unlockedVariants', 'metaKit', 'delveZones', 'pickZone', 'blowText', 'runLines', 'serialise', 'deserialise', 'CLASSES', 'validPortal', 'describeWhere'];
 const T = new Function(BOOT + grab('PARTY CORE') + '\n' + grab('COMBAT CORE') + '\n' + grab('SAVE CORE') + '\n' +
   grab('WORLD CORE') + '\n' + grab('EVENT CORE') + '\n' + grab('TOWN CORE') + '\n' + grab('RUN CORE') +
   '\nreturn {' + names.join(',') + '};')();
@@ -170,6 +170,19 @@ console.log('\n[U9] the Endless Delve is set up by choosing, not typing (v6.1.7)
   ok('the panel is on the page, with radio groups and a numeric seed',
      /<div id="delveSetup"/.test(src) && /setAttribute\('role', 'radio'\)/.test(src) && /id="dsSeed" type="text" maxlength="40"/.test(src));
 }
+
+console.log('\n[U10] Continue after a refresh, and the recall portal (v6.1.11)');
+ok('a portal is a floor and a square', T.validPortal({ floor: 'g3', x: 6, y: 2, f: 1 }));
+ok('junk is not a portal', !T.validPortal(null) && !T.validPortal({ floor: '', x: 1, y: 1, f: 0 }) &&
+   !T.validPortal({ floor: 'g2', x: -1, y: 1, f: 0 }) && !T.validPortal({ floor: 'g2', x: 1, y: 1, f: 7 }));
+ok('the Continue card names the delve floor and the words of its seed',
+   T.describeWhere({ position: { floor: 'g3' }, generated: { seed: 5, seedText: 'goblin king' } }) === 'Endless Delve, floor 3 \u00b7 \u201cgoblin king\u201d');
+ok('or its number', T.describeWhere({ position: { floor: 'g2' }, generated: { seed: 4242 } }) === 'Endless Delve, floor 2 \u00b7 seed 4242');
+ok('Continue is offered on the adventure chooser, first', /var cont = !inPlay && typeof continueSlot === 'function' \? continueSlot\(\) : null;/.test(src) && /opt\('Continue', /.test(src));
+ok('recall leaves a portal below the first floor', /PORTAL = \{ floor: floor\.id, x: pos\.x, y: pos\.y, f: pos\.f \};/.test(src));
+ok('the town offers it, and it closes once used', /id="portalBtn"/.test(src) && /PORTAL = null;\s+\/\/ it closes behind you/.test(src));
+ok('a wipe closes it', /PORTAL = null;\s+\/\/ a wipe closes any portal/.test(src));
+ok('the portal and the seed words are saved', /portal: PORTAL,/.test(src) && /seedText: typeof st\.generated\.seedText === 'string'/.test(src));
 
 console.log('\n' + (fail ? 'FAILED' : 'PASSED') + ' \u2014 ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

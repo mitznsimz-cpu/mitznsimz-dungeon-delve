@@ -816,6 +816,7 @@
   <div class="tpanel on" id="tab-temple"></div>
   <div class="tpanel" id="tab-shop"></div>
   <div class="sect"><button id="changeAdv" title="Pick a different adventure">Other adventures…</button>
+  <button id="portalBtn" class="primary" style="width:100%;margin-bottom:6px" hidden>Through the portal</button>
   <button id="leaveTown" style="width:100%">Back to the tower</button></div>
 </div></div>
 <div id="inv"><div class="inner">
@@ -858,7 +859,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v6.1</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v6.1.11</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -4492,9 +4493,11 @@ function serialise(st) {
     deepest: Math.max(1, Math.floor(st.deepest || 1)),
     generated: st.generated ? { seed: st.generated.seed >>> 0, floors: st.generated.floors,
                                 size: st.generated.size, endless: !!st.generated.endless,
-                                gen: st.generated.gen || 1, print: st.generated.print || null } : null,
+                                gen: st.generated.gen || 1, print: st.generated.print || null,
+                                seedText: typeof st.generated.seedText === 'string' ? st.generated.seedText.slice(0, 40) : null } : null,
     retired: (st.retired || []).slice(-40),
     run: st.run ? JSON.parse(JSON.stringify(st.run)) : null,      // v5.5: this endless run so far
+    portal: validPortal(st.portal) ? { floor: String(st.portal.floor), x: st.portal.x | 0, y: st.portal.y | 0, f: st.portal.f | 0 } : null,
     // v4.8: someone fighting beside the party until the stairs
     ally: st.ally && st.ally.name ? { name: String(st.ally.name), dice: (st.ally.dice || [1, 6, 0]).slice(0, 3),
                                       toHit: st.ally.toHit || 3, floor: st.ally.floor || null } : null
@@ -4683,6 +4686,7 @@ function deserialise(blob, ctx) {
     generated: b.generated || null,
     retired: Array.isArray(b.retired) ? b.retired.slice() : [],
     run: b.run && typeof b.run === 'object' ? b.run : null,
+    portal: validPortal(b.portal) ? b.portal : null,
     ally: b.ally && b.ally.name && Array.isArray(b.ally.dice) ? b.ally : null
   };
   out.ok = true;
@@ -4690,6 +4694,20 @@ function deserialise(blob, ctx) {
 }
 
 /* --- human-readable slot summary, for the load menu --- */
+/* v6.1.11: Word of Recall leaves a portal where it was spoken. */
+function validPortal(p) {
+  return !!p && typeof p === 'object' && typeof p.floor === 'string' && p.floor !== '' &&
+         isFinite(p.x) && isFinite(p.y) && p.x >= 0 && p.y >= 0 && [0, 1, 2, 3].indexOf(p.f | 0) >= 0;
+}
+/* Where a save stands, for the Continue card: the floor, its depth, the delve. */
+function describeWhere(blob) {
+  if (!blob || !blob.position) return '';
+  var fid = String(blob.position.floor || ''), m = /^g(\d+)$/.exec(fid);
+  if (blob.generated) return 'Endless Delve' + (m ? ', floor ' + m[1] : '') +
+                             (blob.generated.seedText ? ' \u00b7 \u201c' + blob.generated.seedText + '\u201d'
+                              : blob.generated.seed != null ? ' \u00b7 seed ' + blob.generated.seed : '');
+  return fid ? 'The Ruined Tower of Ashkeld' : '';
+}
 function describeSave(blob) {
   if (!blob || !Array.isArray(blob.party) || !blob.party.length) return null;
   var lv = blob.party.map(function (c) { return c.level || 1; });
@@ -7383,9 +7401,16 @@ function unpackWorld(saved, packRef) {
 /* Where does this staircase go? Returns null if it leads nowhere yet. */
 var pendingRecall = false;
 
-/* Straight home, from any depth. What the series called Word of Recall. */
+/* Straight home, from any depth. What the series called Word of Recall.
+   v6.1.11: it leaves a portal where it was spoken, below the first floor, and
+   the town offers the way back through it: once, to that very spot. */
+var PORTAL = null;           // { floor, x, y, f }
 function returnToTown(why) {
   var home = PACK.floors[0];
+  if (floor && floor.id !== home.id) {
+    PORTAL = { floor: floor.id, x: pos.x, y: pos.y, f: pos.f };
+    why = (why ? why + ' ' : '') + 'Behind you a portal hangs in the air, where you stood.';
+  }
   floor = packFloor(home.id) || floor;
   if (ally) { say(ally.name + ' takes the road home. They will not forget you.'); ally = null; }
   setMonsterScale(floor.monsterScale || 1);
@@ -10088,6 +10113,7 @@ function openTown() {
   });
   townNote('');
   document.getElementById('town').classList.add('on');
+  showPortalButton();
   renderTown();
 }
 
@@ -10095,6 +10121,28 @@ function closeTown() {
   document.getElementById('town').classList.remove('on');
   autosave();
   redraw();
+}
+function portalLabel() {
+  var f = PORTAL && packFloor(PORTAL.floor);
+  return f ? 'Through the portal \u2014 ' + f.name : '';
+}
+function showPortalButton() {
+  var b = document.getElementById('portalBtn');
+  if (!b) return;
+  var t = portalLabel();
+  b.hidden = !t;
+  if (t) b.textContent = t;
+}
+function usePortal() {
+  if (!PORTAL || !packFloor(PORTAL.floor)) { PORTAL = null; showPortalButton(); return false; }
+  var p = PORTAL;
+  PORTAL = null;                                     // it closes behind you
+  document.getElementById('town').classList.remove('on');
+  if (!changeFloor({ floor: p.floor, at: [p.x, p.y] }, p.f)) { redraw(); return false; }
+  say('You step through. The portal folds shut behind you.');
+  sfx('chime');
+  autosave();
+  return true;
 }
 
 
@@ -11573,6 +11621,7 @@ function endCombat() {
     floorState(world, floor.id);
     pos = { x: floor.entry[0], y: floor.entry[1], f: floor.entryFacing };
     prev = { x: pos.x, y: pos.y, f: pos.f };
+    PORTAL = null;                                  // a wipe closes any portal (v6.1.11)
     say('You wake at the tower door. ' + (r.lost > 0 ? r.lost + ' gold gone from your purse.' : 'Nothing left to lose.'));
     if (PACK.endless) endRun(cst.lastDown);         // v5.5: an endless run ends here
     else hint('wipe');
@@ -11682,6 +11731,7 @@ function captureState() {
     generated: PACK.generated || null,
     retired: retired,
     run: RUN,
+    portal: PORTAL,
     ally: ally
   };
 }
@@ -11730,6 +11780,7 @@ function prepareSavePack(raw, filePack) {
     if (!rb) return { ok: false, notes: ['That delve could not be rebuilt from its seed.'] };
     l = loadPack(rb.pack);
     if (!l.ok) return { ok: false, notes: ['The rebuilt delve would not load.'] };
+    if (raw.generated.seedText && PACK.generated) PACK.generated.seedText = raw.generated.seedText;   // the words, kept
     return { ok: true, moved: !rb.same,
              notes: rb.same ? ['The delve was rebuilt from its seed, ' + raw.generated.seed + '.']
                             : ['This delve was made by an older version of the game and has come out ' +
@@ -11758,6 +11809,7 @@ function loadBlob(raw, filePack) {
   lightTurns = st.lightTurns || 0;
   levitateTurns = st.levitateTurns || 0; waterwalkTurns = st.waterwalkTurns || 0;
   RUN = st.run || null;
+  PORTAL = validPortal(st.portal) && packFloor(st.portal.floor) !== null ? st.portal : null;
   questFlags = st.questFlags;
   createdAt = st.createdAt;
   currentSlotName = st.slotName;
@@ -12214,6 +12266,19 @@ function renderChooser() {
     host.appendChild(d);
   };
 
+  // v6.1.11: after a refresh, the saved game comes first, not only on the party screen
+  var cont = !inPlay && typeof continueSlot === 'function' ? continueSlot() : null;
+  if (cont) {
+    var cd = describeSave(cont.raw), where = describeWhere(cont.raw);
+    opt('Continue', esc(where ? where + ' \u2014 ' : '') + esc(cd.names.split(',')[0]) + ' & co. (' + cd.levels + ')' +
+        (cd.when ? ', saved ' + esc(timeAgo(cd.when)) : '') + (cont.slot === 'auto.prev' ? ' \u00b7 the autosave before' : '') + '.',
+        'resume', function () {
+          var r = loadFrom(cont.slot);
+          if (r.ok) { document.getElementById('chooser').classList.remove('on'); if (r.notes.length) say(r.notes.join(' ')); redraw(); }
+          else chooseNote('<span class="err">' + esc(r.notes.join(' ')) + '</span>');
+        }, 'current');
+  }
+
   if (inPlay) {
     opt('Carry on', 'Back to ' + esc(PACK.name) + ', where you left it.',
         'resume', function () {
@@ -12410,7 +12475,7 @@ function resetRun(keepParty) {
 function resetRunInner() {
   party = [];
   world = {}; questFlags = {};
-  deepest = 1; retired = []; ally = null; RUN = null;
+  deepest = 1; retired = []; ally = null; RUN = null; PORTAL = null;
   currentSlotName = defaultCampaignName(); createdAt = null; basePlaytime = 0; sessionStart = Date.now();
   gold = 0; threat = 0; lightTurns = 0; levitateTurns = 0; waterwalkTurns = 0; msgLog = [];
   cst = null;
@@ -12483,12 +12548,21 @@ function offerTestParties() {
   row.appendChild(wrap);
 }
 
-function offerContinue() {
-  if (!storageAvailable()) return;
-  // the autosave, or if that is spoiled, the one before it
+/* The autosave, or if that is spoiled, the one before it. */
+function continueSlot() {
+  if (!storageAvailable()) return null;
   var slot = saveReadable(readSlot('auto')) ? 'auto' : saveReadable(readSlot('auto.prev')) ? 'auto.prev' : null;
-  if (!slot) return;
-  var raw = readSlot(slot);
+  return slot ? { slot: slot, raw: readSlot(slot) } : null;
+}
+function timeAgo(iso) {
+  var t = Date.parse(iso); if (!isFinite(t)) return '';
+  var m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? m + ' min ago' : m < 1440 ? Math.round(m / 60) + ' h ago' : new Date(t).toLocaleDateString();
+}
+function offerContinue() {
+  var c = continueSlot();
+  if (!c) return;
+  var slot = c.slot, raw = c.raw;
   var d = describeSave(raw);
   var row = document.getElementById('startRow');
   var b = document.createElement('button');
@@ -16794,6 +16868,7 @@ document.getElementById('sheetClose').addEventListener('click', function () {
 });
 document.getElementById('changeAdv').addEventListener('click', function () { openChooser(); });
 document.getElementById('leaveTown').addEventListener('click', closeTown);
+document.getElementById('portalBtn').addEventListener('click', usePortal);
 
 document.getElementById('rerollAll').addEventListener('click', rerollAll);
 document.getElementById('quickParty').addEventListener('click', suggestParty);
@@ -16825,7 +16900,7 @@ loadSprites(function () { if (party.length) redraw(); if (cst) renderCombat(); }
 
 // Offline support. Only works over http(s); a file:// open just skips it.
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) {
-  navigator.serviceWorker.register('sw.js').catch(function () {});
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(function () {});   // v6.1.11: always check for a new one
 }
 
 // The chooser is the first thing shown, so it has to be filled at boot —

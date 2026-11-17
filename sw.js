@@ -1,7 +1,10 @@
 /* Mitz & Simz: Dungeon Delve — offline cache.
-   Cache-first: the game is a single file with no network dependencies, so once
-   it is cached it runs with the radio off. Bump CACHE on every release. */
-const CACHE = 'msdd-v6.1.10';
+   v6.1.11: network first, the cache only when there is no network. Cache-first
+   served the old game on a refresh after every release (and refilled from the
+   browser's HTTP cache, so even a new CACHE could hold old files): it took
+   several refreshes to see a fix. Now one does, and offline still works.
+   Bump CACHE on every release. */
+const CACHE = 'msdd-v6.1.11';
 const ASSETS = [
   './',
   './index.html',
@@ -18,7 +21,10 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // 'reload' goes past the browser's HTTP cache, so a new CACHE holds new files
+  e.waitUntil(caches.open(CACHE)
+    .then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {
@@ -31,13 +37,15 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  if (new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+    fetch(e.request, { cache: 'no-cache' }).then(res => {       // fresh when online, revalidated
       if (res && res.status === 200 && res.type === 'basic') {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy));
       }
       return res;
-    }).catch(() => caches.match('./index.html')))
+    }).catch(() => caches.match(e.request).then(hit => hit ||
+      (e.request.mode === 'navigate' ? caches.match('./index.html') : undefined)))
   );
 });
