@@ -343,6 +343,29 @@ own trinkets can set body and magic. Checks: run U11. The balance simulator's
 parties use fixed kit, so its results are unchanged. Later: E2 (3D preview, mechanisms, regions) and E4 (copy and
 paste, stamps, mirror and rotate).
 
+**E2 and E4 (v7.3): the view, mechanisms, regions, blocks.**
+
+- **The view:** the game's own 3D renderer in the side panel. Inspect a square
+  to look from it (it faces down the longest open run); turn and step with
+  the buttons under it. Each floor's look (its zone) is chosen in the floor bar.
+- **Link:** tap a lever or a pressure plate, then the portcullis, door or grate
+  it opens; a dashed gold line joins them. Tap a teleporter, then the square it
+  sends the party to (a purple line). Tap a linked gate to unlink it. Ids are
+  made unique across the adventure. A plate may be a trap instead.
+- **Regions:** add a region, name it, give it the words the party reads on
+  walking in and a habitat for its wanderers; tap a room to fill it up to its
+  walls and doors, or drag to paint square by square.
+- **Select (E4):** drag to select a block; copy, cut or fill it with rock;
+  paste, then tap where its top-left corner goes; turn and mirror the block
+  held. Ready-made rooms (a cross, a pillared hall, a cell block, a round
+  chamber) paste the same way. The whole floor can be turned or mirrored, its
+  entry, lever links and teleporter landings going with it. Walls stay in step
+  through every paste and turn.
+- **On a phone** the header keeps Undo, Redo, Play-test and Close; the rest is
+  under *More*, and the grid has at least half the screen.
+
+Checks: workshop W11 (mechanisms), W12 (regions), W13 (blocks and stamps).
+
 ### One more run (v6.1, the roadmap's v5.5)
 
 An endless delve is now a run. When the party falls, the run ends: a card

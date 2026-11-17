@@ -16,6 +16,8 @@ const BOOT = grab(src, 'BUNDLED PACK') + grab(src, 'PACK CORE') +
 const names = ['edNewFloor', 'edCarve', 'edFill', 'edSetWall', 'edWall', 'edRock', 'edPaint', 'edPlace', 'edSetEntry',
   'edWallsInStep', 'edPackFrom', 'edProblems', 'edHistory', 'edRecord', 'edUndo', 'edRedo', 'edNewDraft', 'edThing',
   'ED_THINGS', 'ED_TERRAIN', 'ED_SIZES', 'edAddFloor', 'edRemoveFloor', 'edMoveFloor', 'edLinkStairs', 'edPairStairs',
+  'edLink', 'edUnlink', 'edLinks', 'edAim', 'edLeverId', 'edAddRegion', 'edPaintRegion', 'edFloodRegion', 'edRemoveRegion',
+  'edCopy', 'edBlockRotate', 'edBlockMirror', 'edPaste', 'edTransformFloor', 'ED_STAMPS',
   'edMakeItem', 'edMakeMonster', 'edCover', 'edDraftProblems', 'edCatchStairs', 'ED_WINS', 'validatePack', 'proveSolvable', 'loadPack', 'BUNDLED_BASE'];
 const T = new Function(BOOT + grab(wsrc, 'EDITOR CORE') + '\nreturn {' + names.join(',') + '};')();
 
@@ -99,8 +101,11 @@ ok('opened again, all clear', errors(f).length === 0);
 let ex = T.edNewFloor(12, 12, 'box'); T.edPlace(ex, 8, 8, T.edThing('exit').make());
 ok('a way out is a goal too', problems(ex).length === 0, JSON.stringify(problems(ex)));
 const every = T.edNewFloor(20, 20, 'box');
-T.ED_THINGS.forEach((t, i) => { if (t.id !== 'lockedDoor' && t.id !== 'secretDoor') T.edPlace(every, 2 + (i % 8) * 2, 3 + Math.floor(i / 8) * 4, t.make()); });
+const NEEDS_LINK = ['plate', 'portcullis'];
+T.ED_THINGS.forEach((t, i) => { if (t.id !== 'lockedDoor' && t.id !== 'secretDoor' && NEEDS_LINK.indexOf(t.id) < 0) T.edPlace(every, 2 + (i % 8) * 2, 3 + Math.floor(i / 8) * 4, t.make()); });
 ok('every kind of thing on offer passes the game\'s validator', errors(every).length === 0, JSON.stringify(errors(every)));
+const lone = T.edNewFloor(12, 12, 'box'); T.edPlace(lone, 4, 4, T.edThing('plate').make()); T.edPlace(lone, 6, 6, T.edThing('portcullis').make());
+ok('a plate or portcullis on its own asks to be linked', errors(lone).filter(p => /pressure plate with neither|no lever or plate to raise it/.test(p.text)).length === 2);
 
 console.log('\n[W5] the pack it makes');
 f = T.edNewFloor(12, 12, 'box'); T.edPlace(f, 8, 8, T.edThing('staff').make());
@@ -237,6 +242,96 @@ console.log('\n[W10] your own items and monsters (v7.1)');
   const pr = T.edProblems(pk, T.validatePack, T.proveSolvable, d).filter(p => p.level === 'error');
   ok('your key opens your door, your boss wins it: all clear', !pr.length, JSON.stringify(pr));
   ok('it loads into the game', T.loadPack(JSON.parse(JSON.stringify(pk))).ok);
+}
+
+console.log('\n[W11] mechanisms: levers, plates, gates, teleporters (v7.3)');
+{
+  const d = T.edNewDraft(14, 'box'), f = d.floors[0];
+  for (let y = 1; y <= 12; y++) T.edSetWall(f, 7, y, 1, true);          // a wall down the middle
+  T.edSetWall(f, 7, 6, 1, false);                                       // with one gap
+  T.edPlace(f, 8, 6, T.edThing('portcullis').make());                    // and a portcullis in it
+  T.edPlace(f, 10, 10, T.edThing('staff').make());
+  T.edPlace(f, 3, 3, T.edThing('lever').make());
+  let pr = T.edProblems(T.edPackFrom(d, T.BUNDLED_BASE), T.validatePack, T.proveSolvable, d).filter(p => p.level === 'error');
+  ok('a portcullis with nothing to raise it is an error', pr.length > 0);
+  ok('a lever links to it', T.edLink(d, f, '3,3', '8,6') && f.features['3,3'].id === 'lv.1' && f.features['8,6'].needsLever === 'lv.1' && f.features['3,3'].opens === '8,6');
+  pr = T.edProblems(T.edPackFrom(d, T.BUNDLED_BASE), T.validatePack, T.proveSolvable, d).filter(p => p.level === 'error');
+  ok('and then it can be played through', !pr.length, JSON.stringify(pr));
+  ok('the link is drawn', T.edLinks(f).some(l => l.from === '3,3' && l.to === '8,6'));
+  ok('a lever cannot open a chest', (() => { T.edPlace(f, 2, 2, { type: 'chest', gold: [1, 4, 0] }); return !T.edLink(d, f, '3,3', '2,2'); })());
+  ok('a door cannot pull a lever', !T.edLink(d, f, '8,6', '3,3'));
+  T.edPlace(f, 4, 4, T.edThing('plate').make());
+  T.edPlace(f, 8, 2, { type: 'door' }); T.edSetWall(f, 7, 2, 1, false);
+  ok('a plate opens a door, with its own id', T.edLink(d, f, '4,4', '8,2') && f.features['4,4'].id === 'pl.1' && f.features['8,2'].needsLever === 'pl.1');
+  ok('ids are unique across the adventure', (() => { const g = T.edAddFloor(d, 10, 10, 'box'); T.edPlace(d.floors[g], 2, 2, T.edThing('lever').make()); T.edPlace(d.floors[g], 4, 4, { type: 'portcullis' }); T.edLink(d, d.floors[g], '2,2', '4,4'); return d.floors[g].features['2,2'].id === 'lv.2'; })());
+  ok('unlinking from the gate', T.edUnlink(f, '8,2') && !f.features['8,2'].needsLever);
+  ok('unlinking from the lever frees everything it opened', T.edUnlink(f, '3,3') && !f.features['8,6'].needsLever && !f.features['3,3'].opens);
+  T.edPlace(f, 2, 10, T.edThing('teleporter').make());
+  ok('a teleporter is aimed at a square', T.edAim(f, '2,10', 12, 3) && f.features['2,10'].at.join() === '12,3' && f.features['2,10'].to === f.id);
+  ok('not into rock, nor onto itself', !T.edAim(f, '2,10', 0, 0) && !T.edAim(f, '2,10', 2, 10));
+  ok('and its line is drawn', T.edLinks(f).some(l => l.kind === 'tele' && l.to === '12,3'));
+}
+
+console.log('\n[W12] regions (v7.3)');
+{
+  const f = T.edNewFloor(12, 12, 'box');
+  const a = T.edAddRegion(f, 'The Mill Pond'), b = T.edAddRegion(f, 'The Mill Pond');
+  ok('a region gets an id from its name, unique', a === 'the-mill-pond' && b === 'the-mill-pond-2');
+  ok('squares are painted into it', T.edPaintRegion(f, 3, 3, a) && f.regionMap['3,3'] === a);
+  ok('not rock, not an unknown region', !T.edPaintRegion(f, 0, 0, a) && !T.edPaintRegion(f, 4, 4, 'nope'));
+  ok('and painted out', T.edPaintRegion(f, 3, 3, null) && !f.regionMap['3,3']);
+  const g = T.edNewFloor(14, 14, 'rock'); T.edCarve(g, 1, 1, 5, 5); T.edCarve(g, 6, 3, 8, 3); T.edCarve(g, 9, 1, 12, 6);
+  T.edPlace(g, 7, 3, { type: 'door' }); const ra = T.edAddRegion(g, 'West');
+  ok('a tap fills the whole room, up to the door', T.edFloodRegion(g, 2, 2, ra) === 26 && g.regionMap['6,3'] === ra && !g.regionMap['7,3'] && !g.regionMap['10,2'], Object.keys(g.regionMap).length);
+  ok('painting out fills the same way', T.edFloodRegion(g, 2, 2, null) === 26 && !Object.keys(g.regionMap).length);
+  T.edPaintRegion(f, 5, 5, b); f.regions[b].look = 'Still water.'; f.regions[b].habitat = 'flooded';
+  ok('removing a region clears its squares', T.edRemoveRegion(f, b) && !f.regionMap['5,5'] && !f.regions[b]);
+  T.edPaintRegion(f, 6, 6, a); f.regions[a].look = 'Reeds and black water.';
+  const d = { name: 'R', floors: [f], cover: { win: 'exit' } }; T.edPlace(f, 9, 9, T.edThing('exit').make());
+  ok('regions pass the game\'s checks', !T.edProblems(T.edPackFrom(d, T.BUNDLED_BASE), T.validatePack, T.proveSolvable, d).filter(p => p.level === 'error').length);
+}
+
+console.log('\n[W13] blocks: copy, paste, rotate, mirror, stamps (v7.3)');
+{
+  const f = T.edNewFloor(20, 20, 'rock');
+  T.edCarve(f, 2, 2, 5, 4); T.edPlace(f, 3, 3, { type: 'chest', gold: [1, 4, 0] }); T.edPaint(f, 4, 3, 'water');
+  const b = T.edCopy(f, 2, 2, 5, 4);
+  ok('a copied block has its size, things and terrain', b.w === 4 && b.h === 3 && b.features['1,1'].type === 'chest' && b.terrain['2,1'] === 'water');
+  ok('pasted elsewhere', T.edPaste(f, b, 10, 10) && f.features['11,11'].type === 'chest' && f.terrain['12,11'] === 'water' && !T.edRock(f, 10, 10));
+  ok('walls in step after a paste', T.edWallsInStep(f));
+  T.edCarve(f, 6, 3, 9, 3);                                   // a corridor up to the pasted room's side
+  T.edPaste(f, b, 10, 2);
+  ok('a paste against open ground stays walled where the block is walled', T.edWall(f, 9, 3, 1) && T.edWallsInStep(f));
+  const r = T.edBlockRotate(b);
+  ok('a block turned is tall where it was wide', r.w === 3 && r.h === 4 && r.features['1,1'].type === 'chest');
+  ok('four turns bring it back', JSON.stringify(T.edBlockRotate(T.edBlockRotate(T.edBlockRotate(r)))) === JSON.stringify(b));
+  const m = T.edBlockMirror(b, 'x');
+  ok('mirrored, the chest moves across and twice is the same', m.features['2,1'].type === 'chest' && JSON.stringify(T.edBlockMirror(m, 'x')) === JSON.stringify(b));
+  ok('mirrored top to bottom, twice is the same', JSON.stringify(T.edBlockMirror(T.edBlockMirror(b, 'y'), 'y')) === JSON.stringify(b));
+  const g = T.edNewFloor(20, 20, 'rock'); T.edPaste(g, T.edBlockRotate(b), 5, 5); T.edPaste(g, m, 12, 12);
+  ok('turned and mirrored blocks paste in step', T.edWallsInStep(g));
+  ok('pasting off the edge keeps what fits', T.edPaste(g, b, 18, 18) && T.edWallsInStep(g));
+  Object.keys(T.ED_STAMPS).forEach(k => {
+    const s = T.ED_STAMPS[k].make(), h = T.edNewFloor(20, 20, 'rock');
+    T.edPaste(h, s, 6, 6);
+    ok('the ' + k + ' stamp pastes in step', T.edWallsInStep(h) && h.cells.some(c => !(c & 16)));
+  });
+  const cellsF = T.edNewFloor(14, 14, 'rock'); T.edPaste(cellsF, T.ED_STAMPS.cells.make(), 2, 2);
+  T.edSetEntry(cellsF, 3, 5, 1); T.edPlace(cellsF, 3, 3, T.edThing('exit').make());
+  const cd = { name: 'C', floors: [cellsF], cover: { win: 'exit' } };
+  ok('a cell block: through a cell door to a way out, all clear', !T.edProblems(T.edPackFrom(cd, T.BUNDLED_BASE), T.validatePack, T.proveSolvable, cd).filter(p => p.level === 'error').length,
+     JSON.stringify(T.edProblems(T.edPackFrom(cd, T.BUNDLED_BASE), T.validatePack, T.proveSolvable, cd)));
+  // the whole floor
+  const w = T.edNewFloor(16, 12, 'box'); T.edPlace(w, 3, 2, { type: 'lever', id: 'lv.1', opens: '10,8' }); T.edPlace(w, 10, 8, { type: 'portcullis', needsLever: 'lv.1' });
+  T.edSetEntry(w, 2, 9, 1); T.edPlace(w, 5, 5, { type: 'teleporter', to: w.id, at: [12, 3] });
+  T.edTransformFloor(w, 'rotate');
+  ok('a whole floor turned: its size swaps', w.w === 12 && w.h === 16);
+  ok('the entry turns with it, and faces the new way', w.entry.join() === '2,2' && w.entryFacing === 2, w.entry.join() + ' ' + w.entryFacing);
+  ok('the lever still opens its portcullis, wherever it went', w.features[w.features['9,3'] ? '9,3' : ''] && w.features[w.features['9,3'].opens].needsLever === 'lv.1');
+  ok('the teleporter still lands where it did', w.features['6,5'].at.join() === '8,12');
+  ok('walls in step', T.edWallsInStep(w));
+  T.edTransformFloor(w, 'mirrorX'); T.edTransformFloor(w, 'mirrorY');
+  ok('mirrored both ways, still in step', T.edWallsInStep(w));
 }
 
 console.log('\n[W7] the page');

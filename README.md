@@ -13,7 +13,7 @@ Or download the repo and double-click `index.html`. It plays offline once loaded
 - **Four classes:** Fighter, Wizard, Priest and Rogue. Make your own party, or start with a ready-made one.
 - **The Ruined Tower of Ashkeld:** a hand-made adventure over three floors.
 - **Endless delves:** generated floors, each with its own theme and creatures.
-- **The Workshop (v7.0, v7.1):** build an adventure of your own, floor by floor, joined by stairs, on a grid: carve rooms and corridors, set walls, paint terrain, place monsters, doors, chests, traps and a goal. The game's own validator and solver check it as you go, and Play-test drops a ready-made party into it without touching your saves. Give it a cover (blurb, how it is won: the staff, a boss or the way out; starting gold; what the shop sells) make your own items and monsters from the game's, and save it to your adventures to play from the New Game list. Drafts are kept on the device; Export writes a pack any copy of the game can load.
+- **The Workshop (v7.0, v7.1):** build an adventure of your own, floor by floor, joined by stairs, on a grid: carve rooms and corridors, set walls, paint terrain, place monsters, doors, chests, traps and a goal. The game's own validator and solver check it as you go, and Play-test drops a ready-made party into it without touching your saves. Give it a cover (blurb, how it is won: the staff, a boss or the way out; starting gold; what the shop sells) make your own items and monsters from the game's, link levers and plates to portcullises, name the rooms, copy and paste and turn whole blocks, stamp ready-made rooms, look from any square in 3D, and save it to your adventures to play from the New Game list. Drafts are kept on the device; Export writes a pack any copy of the game can load.
 - **One more run (v6.1):** when the party falls in an endless delve, the run ends with a summary (how deep, how many foes, how much gold, what struck last) and unlocks something for the next: starting kit, a class variant (Vanguard, Hedge Witch, War Priest, Cutthroat) or stranger stone for the floors. Chests in a delve can hold Fine (+1) and Masterwork (+2) gear, unidentified until it is worn or Simz looks at it.
 - **62 monsters** that live where they belong: warrens, crypts, flooded halls, ruins, the deep and the forges. Some have signature moves. The gelatinous cube swallows a hero, the medusa turns one to stone, and fire stops a troll mending.
 - **A dungeon that fights back:** hidden traps, chests that bite, fountains, altars, riddling statues, prisoners to free, pressure plates, portcullises, ice and one-way doors.
@@ -59,7 +59,7 @@ You need [Node](https://nodejs.org). From the top folder:
 sh tests/run_gate.sh
 ```
 
-It runs 31 runners with 2,639 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
+It runs 31 runners with 2,682 checks, and ends with `GATE PASSED`. Each runner lifts a marked block of code straight out of `index.html` and runs it in Node, so the tests can't drift from the game.
 
 ## Licence
 

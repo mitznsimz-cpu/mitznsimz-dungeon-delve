@@ -27,6 +27,10 @@ var ED_THINGS = [
   { id: 'door',       label: 'Door',             glyph: '▯', make: function () { return { type: 'door' }; } },
   { id: 'lockedDoor', label: 'Locked door',      glyph: '▮', make: function () { return { type: 'door', locked: true, keyId: 'it.key.rust', text: 'A locked door.' }; } },
   { id: 'secretDoor', label: 'Secret door',      glyph: '░', make: function () { return { type: 'secretDoor', text: 'A seam, barely there.' }; } },
+  { id: 'lever',      label: 'Lever',            glyph: '\u2310', make: function () { return { type: 'lever', text: 'An iron lever.', note: 'Somewhere, something grinds open.' }; } },
+  { id: 'plate',      label: 'Pressure plate',   glyph: '\u25a1', make: function () { return { type: 'plate', text: 'A flagstone sits a finger proud of the rest.' }; } },
+  { id: 'portcullis', label: 'Portcullis',       glyph: '\u2261', make: function () { return { type: 'portcullis', text: 'A portcullis. Something elsewhere raises it.' }; } },
+  { id: 'teleporter', label: 'Teleporter',       glyph: '\u273a', make: function () { return { type: 'teleporter', text: 'A sigil cut deep into the flagstone.' }; } },
   { id: 'chest',      label: 'Chest',            glyph: '▣', make: function () { return { type: 'chest', gold: [2, 8, 4] }; } },
   { id: 'trap',       label: 'Trap',             glyph: '✖', make: function () { return { type: 'trap', kind: 'snare' }; } },
   { id: 'fountain',   label: 'Fountain',         glyph: '♨', make: function () { return { type: 'fountain' }; } },
@@ -268,6 +272,219 @@ function edMakeMonster(base, ch, taken) {
   return m;
 }
 
+/* ---- v7.3 (E2): mechanisms ----
+   A lever or a plate opens whatever names it: a portcullis, a door, a grate
+   (a secret door). Ids are made unique across the whole adventure, because
+   the game keeps thrown levers by id. A teleporter sends you to a square. */
+var ED_OPENERS = ['lever', 'plate'], ED_GATES = ['portcullis', 'door', 'secretDoor'];
+function edLeverId(draft, type) {
+  var used = {};
+  draft.floors.forEach(function (f) { Object.keys(f.features).forEach(function (k) { var id = f.features[k].id; if (id) used[id] = 1; }); });
+  var pre = type === 'plate' ? 'pl.' : 'lv.', n = 1;
+  while (used[pre + n]) n++;
+  return pre + n;
+}
+/* Link the opener at a to the gate at b, on floor f. False if they cannot be linked. */
+function edLink(draft, f, a, b) {
+  var src = f.features[a], dst = f.features[b];
+  if (!src || !dst || a === b) return false;
+  if (ED_OPENERS.indexOf(src.type) < 0 || ED_GATES.indexOf(dst.type) < 0) return false;
+  if (!src.id) src.id = edLeverId(draft, src.type);
+  dst.needsLever = src.id;
+  if (src.type === 'lever') src.opens = b;
+  return true;
+}
+function edUnlink(f, key) {
+  var ft = f.features[key]; if (!ft) return false;
+  if (ft.needsLever) { delete ft.needsLever; return true; }
+  if (ft.id) {
+    var any = false;
+    Object.keys(f.features).forEach(function (k) { if (f.features[k].needsLever === ft.id) { delete f.features[k].needsLever; any = true; } });
+    delete ft.opens;
+    return any;
+  }
+  return false;
+}
+/* The lines to draw: from each opener to what it opens, on one floor. */
+function edLinks(f) {
+  var at = {}, out = [];
+  Object.keys(f.features).forEach(function (k) { var ft = f.features[k]; if (ft.id && ED_OPENERS.indexOf(ft.type) >= 0) at[ft.id] = k; });
+  Object.keys(f.features).forEach(function (k) {
+    var ft = f.features[k];
+    if (ft.needsLever && at[ft.needsLever]) out.push({ from: at[ft.needsLever], to: k, kind: 'gate' });
+    if (ft.type === 'teleporter' && ft.at && (!ft.to || ft.to === f.id)) out.push({ from: k, to: edKey(ft.at[0], ft.at[1]), kind: 'tele' });
+  });
+  return out;
+}
+function edAim(f, key, x, y) {
+  var ft = f.features[key];
+  if (!ft || ft.type !== 'teleporter' || edRock(f, x, y) || key === edKey(x, y)) return false;
+  ft.to = f.id; ft.at = [x, y];
+  return true;
+}
+
+/* ---- v7.3 (E2): regions ----
+   Named parts of a floor: what the party reads on entering, and the habitat
+   that decides which wanderers turn up there. */
+var ED_HABITATS = ['', 'warren', 'crypt', 'flooded', 'deep', 'forge', 'ruin'];
+function edAddRegion(f, name) {
+  f.regions = f.regions || {}; f.regionMap = f.regionMap || {};
+  var base = edSlug(name || 'room'), id = base, n = 2;
+  while (f.regions[id]) id = base + '-' + n++;
+  f.regions[id] = { name: String(name || 'A room').slice(0, 40), look: '' };
+  return id;
+}
+function edPaintRegion(f, x, y, id) {
+  if (!edIn(f, x, y) || edRock(f, x, y)) return false;
+  f.regionMap = f.regionMap || {};
+  if (id && !(f.regions || {})[id]) return false;
+  if (id) f.regionMap[edKey(x, y)] = id; else delete f.regionMap[edKey(x, y)];
+  return true;
+}
+/* A whole room at once: every open square reached from x,y without passing a
+   wall or a door (doors, grates and portcullises mark where rooms end). */
+function edFloodRegion(f, x, y, id) {
+  if (!edIn(f, x, y) || edRock(f, x, y)) return 0;
+  if (id && !(f.regions || {})[id]) return 0;
+  var gate = function (k) { var ft = f.features[k]; return ft && (ft.type === 'door' || ft.type === 'secretDoor' || ft.type === 'portcullis'); };
+  var seen = {}, todo = [[x, y]], n = 0;
+  seen[edKey(x, y)] = 1;
+  while (todo.length && n < 900) {
+    var c = todo.shift(), k = edKey(c[0], c[1]);
+    if (edPaintRegion(f, c[0], c[1], id)) n++;
+    if (gate(k) && n > 1) continue;
+    for (var d = 0; d < 4; d++) {
+      if (edWall(f, c[0], c[1], d)) continue;
+      var nx = c[0] + ED_DX[d], ny = c[1] + ED_DY[d], nk = edKey(nx, ny);
+      if (seen[nk] || edRock(f, nx, ny) || gate(nk)) continue;
+      seen[nk] = 1; todo.push([nx, ny]);
+    }
+  }
+  return n;
+}
+function edRemoveRegion(f, id) {
+  if (!f.regions || !f.regions[id]) return false;
+  delete f.regions[id];
+  Object.keys(f.regionMap || {}).forEach(function (k) { if (f.regionMap[k] === id) delete f.regionMap[k]; });
+  return true;
+}
+
+/* ---- v7.3 (E4): blocks: copy, paste, rotate, mirror, stamps ----
+   A block is a rectangle of squares lifted off a floor, with its walls,
+   things, terrain and regions. Pasting keeps walls in step at its edges. */
+function edCopy(f, x0, y0, x1, y1) {
+  var ax = Math.max(0, Math.min(x0, x1)), bx = Math.min(f.w - 1, Math.max(x0, x1));
+  var ay = Math.max(0, Math.min(y0, y1)), by = Math.min(f.h - 1, Math.max(y0, y1));
+  var b = { w: bx - ax + 1, h: by - ay + 1, cells: [], features: {}, terrain: {}, regionMap: {} };
+  for (var y = ay; y <= by; y++) for (var x = ax; x <= bx; x++) {
+    b.cells.push(f.cells[edIdx(f, x, y)]);
+    var k = edKey(x, y), nk = edKey(x - ax, y - ay);
+    if (f.features[k]) { b.features[nk] = JSON.parse(JSON.stringify(f.features[k])); delete b.features[nk].id; delete b.features[nk].needsLever; delete b.features[nk].opens; }
+    if (f.terrain[k]) b.terrain[nk] = f.terrain[k];
+    if (f.regionMap && f.regionMap[k]) b.regionMap[nk] = f.regionMap[k];
+  }
+  return b;
+}
+function edMapKeys(obj, fn) { var o = {}; Object.keys(obj || {}).forEach(function (k) { var p = k.split(',').map(Number), q = fn(p[0], p[1]); o[edKey(q[0], q[1])] = obj[k]; }); return o; }
+function edRotBits(c, turns) {                 // walls turn with the squares, clockwise
+  var walls = c & 15, rest = c & ~15;
+  for (var t = 0; t < turns; t++) walls = ((walls << 1) | (walls >> 3)) & 15;
+  return rest | walls;
+}
+function edBlockRotate(b) {                   // a quarter turn clockwise
+  var w = b.h, h = b.w, cells = new Array(w * h);
+  for (var y = 0; y < b.h; y++) for (var x = 0; x < b.w; x++) cells[x * w + (b.h - 1 - y)] = edRotBits(b.cells[y * b.w + x], 1);
+  var f = function (x, y) { return [b.h - 1 - y, x]; };
+  return { w: w, h: h, cells: cells, features: edMapKeys(b.features, f), terrain: edMapKeys(b.terrain, f), regionMap: edMapKeys(b.regionMap, f) };
+}
+function edBlockMirror(b, across) {           // 'x': left to right; 'y': top to bottom
+  var cells = new Array(b.w * b.h);
+  for (var y = 0; y < b.h; y++) for (var x = 0; x < b.w; x++) {
+    var c = b.cells[y * b.w + x], walls = c & 15, rest = c & ~15, nw = walls;
+    if (across === 'x') nw = (walls & (ED_N | ED_S)) | ((walls & ED_E) ? ED_W : 0) | ((walls & ED_W) ? ED_E : 0);
+    else nw = (walls & (ED_E | ED_W)) | ((walls & ED_N) ? ED_S : 0) | ((walls & ED_S) ? ED_N : 0);
+    var nx = across === 'x' ? b.w - 1 - x : x, ny = across === 'x' ? y : b.h - 1 - y;
+    cells[ny * b.w + nx] = rest | nw;
+  }
+  var f = function (x, y) { return across === 'x' ? [b.w - 1 - x, y] : [x, b.h - 1 - y]; };
+  return { w: b.w, h: b.h, cells: cells, features: edMapKeys(b.features, f), terrain: edMapKeys(b.terrain, f), regionMap: edMapKeys(b.regionMap, f) };
+}
+/* Paste a block with its top-left at x,y; what falls off the map is left behind. */
+function edPaste(f, b, x0, y0) {
+  var put = false;
+  for (var y = 0; y < b.h; y++) for (var x = 0; x < b.w; x++) {
+    var X = x0 + x, Y = y0 + y; if (!edIn(f, X, Y)) continue;
+    var k = edKey(X, Y), nk = edKey(x, y);
+    f.cells[edIdx(f, X, Y)] = b.cells[y * b.w + x];
+    delete f.features[k]; delete f.terrain[k]; if (f.regionMap) delete f.regionMap[k];
+    if (b.features[nk]) f.features[k] = JSON.parse(JSON.stringify(b.features[nk]));
+    if (b.terrain[nk]) f.terrain[k] = b.terrain[nk];
+    if (b.regionMap[nk] && f.regions && f.regions[b.regionMap[nk]]) f.regionMap[k] = b.regionMap[nk];
+    put = true;
+  }
+  // keep walls in step everywhere the block touches, inside and at its edges
+  for (y = y0 - 1; y <= y0 + b.h; y++) for (x = x0 - 1; x <= x0 + b.w; x++) {
+    if (!edIn(f, x, y)) continue;
+    for (var d = 0; d < 4; d++) {
+      var nx = x + ED_DX[d], ny = y + ED_DY[d];
+      if (!edIn(f, nx, ny)) { edSetWall(f, x, y, d, true); continue; }
+      if (edRock(f, x, y) || edRock(f, nx, ny)) { edSetWall(f, x, y, d, true); continue; }
+      var inside = x >= x0 && x < x0 + b.w && y >= y0 && y < y0 + b.h;
+      var wall = edWall(f, x, y, d) || edWall(f, nx, ny, (d + 2) % 4);
+      if (inside) wall = edWall(f, x, y, d);            // the block's own wall decides at its edge
+      edSetWall(f, x, y, d, wall);
+    }
+  }
+  return put;
+}
+function edClear(f, x0, y0, x1, y1) { return edFill(f, x0, y0, x1, y1); }
+/* The whole floor turned or mirrored: the entry and the links go with it. */
+function edTransformFloor(f, op) {
+  var b = edCopy(f, 0, 0, f.w - 1, f.h - 1);
+  // ids and links survive a whole-floor turn: copy them back by position
+  var keep = {}; Object.keys(f.features).forEach(function (k) { keep[k] = f.features[k]; });
+  var nb = op === 'rotate' ? edBlockRotate(b) : edBlockMirror(b, op === 'mirrorX' ? 'x' : 'y');
+  var ow = f.w, oh = f.h;                    // the size before the turn: f.w and f.h change below
+  var map = op === 'rotate' ? function (x, y) { return [oh - 1 - y, x]; } : op === 'mirrorX' ? function (x, y) { return [ow - 1 - x, y]; } : function (x, y) { return [x, oh - 1 - y]; };
+  var feats = edMapKeys(keep, map);
+  var turnFace = op === 'rotate' ? function (d) { return (d + 1) % 4; } : op === 'mirrorX' ? function (d) { return d === 1 ? 3 : d === 3 ? 1 : d; } : function (d) { return d === 0 ? 2 : d === 2 ? 0 : d; };
+  var e = map(f.entry[0], f.entry[1]);
+  f.w = nb.w; f.h = nb.h; f.cells = nb.cells; f.terrain = nb.terrain; f.regionMap = nb.regionMap;
+  f.features = {};
+  Object.keys(feats).forEach(function (k) {
+    var ft = JSON.parse(JSON.stringify(feats[k]));
+    if (ft.type === 'lever' && ft.opens) { var p = ft.opens.split(',').map(Number), q = map(p[0], p[1]); ft.opens = edKey(q[0], q[1]); }
+    if (ft.type === 'teleporter' && ft.at && (!ft.to || ft.to === f.id)) ft.at = map(ft.at[0], ft.at[1]);
+    f.features[k] = ft;
+  });
+  f.entry = e; f.entryFacing = turnFace(f.entryFacing || 0);
+  return true;
+}
+/* Ready-made rooms, as blocks to paste. */
+function edRoomBlock(w, h) { var g = { w: w, h: h, cells: [], features: {}, terrain: {}, regionMap: {} }; for (var i = 0; i < w * h; i++) g.cells.push(ED_ROCK | 15); return g; }
+function edBlockFloor(b) { return { w: b.w, h: b.h, cells: b.cells, features: b.features, terrain: b.terrain, regionMap: b.regionMap }; }
+var ED_STAMPS = {
+  cross: { label: 'A cross', make: function () {
+    var f = edBlockFloor(edRoomBlock(7, 7)); edCarve(f, 2, 0, 4, 6); edCarve(f, 0, 2, 6, 4); return edCopy(f, 0, 0, 6, 6); } },
+  hall: { label: 'A pillared hall', make: function () {
+    var f = edBlockFloor(edRoomBlock(9, 7)); edCarve(f, 0, 0, 8, 6);
+    [[2, 2], [6, 2], [2, 4], [6, 4]].forEach(function (p) { edPaint(f, p[0], p[1], 'pillars'); });
+    return edCopy(f, 0, 0, 8, 6); } },
+  cells: { label: 'A cell block', make: function () {
+    var f = edBlockFloor(edRoomBlock(9, 7)); edCarve(f, 0, 3, 8, 3);
+    [1, 4, 7].forEach(function (x) {
+      edCarve(f, x, 0, x, 1); edCarve(f, x, 5, x, 6);
+      edSetWall(f, x, 1, 2, false); edSetWall(f, x, 5, 0, false);
+      edCarve(f, x, 2, x, 2); edCarve(f, x, 4, x, 4);
+      f.features[edKey(x, 2)] = { type: 'door' }; f.features[edKey(x, 4)] = { type: 'door' };
+    });
+    // the corridor joins each door, the doors join each cell
+    [1, 4, 7].forEach(function (x) { edSetWall(f, x, 2, 2, false); edSetWall(f, x, 4, 0, false); edSetWall(f, x, 1, 2, false); edSetWall(f, x, 5, 0, false); });
+    return edCopy(f, 0, 0, 8, 6); } },
+  round: { label: 'A round chamber', make: function () {
+    var f = edBlockFloor(edRoomBlock(7, 7)); edCarve(f, 2, 0, 4, 6); edCarve(f, 1, 1, 5, 5); edCarve(f, 0, 2, 6, 4); return edCopy(f, 0, 0, 6, 6); } }
+};
+
 /* ---- the cover: what the adventure is, how it is won, what Simz sells ---- */
 var ED_WINS = {
   staff: { flag: 'gotStaff',    label: 'Find the staff',     text: 'The staff is yours. The gate can be closed.' },
@@ -390,6 +607,7 @@ function edNewDraft(size, start) {
   if (typeof document === 'undefined') return;
 
   var WS = { draft: null, hist: edHistory(), tool: 'carve', thing: 'monster', terrain: 'water', fi: 0,
+             linkFrom: null, region: null, block: null, clip: null, pasting: false, hover: null, look: null, lookF: 1,
              sel: null, drag: null, zoom: 0, problems: [], timer: 0 };
   var DRAFT_KEY = function () { return (typeof MSDD_NS !== 'undefined' ? MSDD_NS : '') + 'msdd_workshop'; };
 
@@ -401,7 +619,10 @@ function edNewDraft(size, start) {
     ['thing', 'Things', 'Place monsters, doors, chests, traps and goals'],
     ['entry', 'Start', 'Where the party arrives: tap again to turn them'],
     ['erase', 'Erase', 'Clear things and terrain from squares'],
-    ['select', 'Inspect', 'Tap a thing to change its settings']
+    ['select', 'Inspect', 'Tap a thing to change its settings, and look from that square in 3D'],
+    ['link', 'Link', 'Tap a lever or plate, then what it opens. Or a teleporter, then where it sends you'],
+    ['region', 'Regions', 'Name the rooms and paint them onto squares'],
+    ['block', 'Select', 'Drag to select a block: copy, cut, paste, turn, mirror, or stamp a ready-made room']
   ];
 
   function el(id) { return document.getElementById(id); }
@@ -429,6 +650,7 @@ function edNewDraft(size, start) {
     '#wsZoom{position:sticky;left:8px;top:8px;display:flex;gap:4px;z-index:2;width:max-content}',
     '#wsZoom button{width:32px;height:30px;min-height:0;padding:0;font-size:13px}',
     '#wsSide{border-left:1px solid var(--line);padding:10px;overflow:auto;display:flex;flex-direction:column;gap:12px;font-size:12px}',
+    '#wsSide > div{flex:0 0 auto}',
     '#wsSide h3{font:600 10px/1.4 ui-monospace,Menlo,monospace;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin:0 0 6px}',
     '#wsInspect label{display:flex;flex-direction:column;gap:3px;margin:0 0 8px;font-size:11px;color:var(--text-dim)}',
     '#wsInspect input,#wsInspect select,#wsInspect textarea{background:rgba(255,255,255,.03);color:var(--text);border:1px solid var(--line);font-size:12px;padding:5px 6px;font-family:inherit}',
@@ -439,6 +661,15 @@ function edNewDraft(size, start) {
     '#wsProblems li.warning{color:var(--text-dim)}',
     '#wsProblems li.okay{border-color:#3f5a32;color:#b9d8a6;cursor:default}',
     '#wsStatus{font-size:11px;color:var(--text-dim);min-height:15px}',
+    '#wsViewBox{position:relative;width:100%;padding-top:75%;background:#000;border:1px solid var(--line);overflow:hidden}',
+    '#wsView{position:absolute;inset:0;width:100%!important;height:100%!important;display:block}',
+    '#wsViewBar{display:flex;gap:4px;margin-top:4px}',
+    '#wsViewBar button{flex:1;height:28px;min-height:0;font-size:11px;padding:0}',
+    '#wsToolPanel button{height:30px;min-height:0;font-size:11px;padding:0 8px;margin:0 4px 4px 0}',
+    '#wsToolPanel input,#wsToolPanel textarea,#wsToolPanel select{width:100%;background:rgba(255,255,255,.03);color:var(--text);border:1px solid var(--line);font-size:12px;padding:5px 6px;font-family:inherit;margin:0 0 6px;box-sizing:border-box}',
+    '#wsToolPanel .reg{display:flex;align-items:center;gap:6px;margin:0 0 4px}',
+    '#wsToolPanel .reg button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}',
+    '#wsToolPanel .sw{width:12px;height:12px;flex:0 0 12px;border:1px solid rgba(255,255,255,.3)}',
     '#wsFloors{display:flex;gap:4px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--line)}',
     '#wsFloors button{height:28px;min-height:0;font-size:11px;padding:0 9px}',
     '#wsFloors button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold);background:rgba(201,162,74,.09)}',
@@ -480,7 +711,15 @@ function edNewDraft(size, start) {
     '#wsNew .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px}',
     '#wsNew .row button{min-width:58px;height:38px;font-size:12px}',
     '#wsNew .row button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}',
+    '#wsMore{display:none}',
     '@media (max-width:760px){',
+    '  #wsMore{display:inline-block}',
+    '  #wsHead h2{display:none}',
+    '  #wsHead:not(.more) #wsNewBtn,#wsHead:not(.more) #wsExport,#wsHead:not(.more) #wsImport,#wsHead:not(.more) #wsParty,',
+    '  #wsHead:not(.more) #wsCoverBtn,#wsHead:not(.more) #wsItemsBtn,#wsHead:not(.more) #wsMonBtn,#wsHead:not(.more) #wsKeep{display:none}',
+    '  #wsHead input#wsName{flex:1 1 100%}',
+    '  #wsGridWrap{min-height:48vh}',
+    '  #wsFloors{padding:4px 6px}',
     '  #wsBody{grid-template-columns:1fr;grid-template-rows:auto 1fr auto}',
     '  #wsTools{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--line);padding:6px}',
     '  #wsTools button{flex:1 1 22%;text-align:center;padding:0 4px}',
@@ -505,6 +744,7 @@ function edNewDraft(size, start) {
     '<button id="wsCoverBtn" title="Name, story, how it is won, what the shop sells">Cover\u2026</button>' +
     '<button id="wsItemsBtn" title="Your own items">Items\u2026</button><button id="wsMonBtn" title="Your own monsters">Monsters\u2026</button>' +
     '<button id="wsKeep" title="Keep it in your adventures, to play from the New Game list">Save to my adventures</button>' +
+    '<button id="wsMore" aria-expanded="false">More \u25be</button>' +
     '<button id="wsClose">Close</button></div>' +
     '<div id="wsFloors"></div>' +
     '<div id="wsBody"><div id="wsTools"></div>' +
@@ -517,7 +757,10 @@ function edNewDraft(size, start) {
     '<p style="font-size:11px;color:var(--text-dim);margin:0 0 10px">This replaces the floor you have (Undo brings it back).</p>' +
     '<div class="row" style="justify-content:flex-end;margin:0"><button id="wsNewCancel">Cancel</button><button id="wsNewGo" class="go">Make it</button></div></div></div>' +
     '</div>' +
-    '<div id="wsSide"><div><h3>Selected</h3><div id="wsInspect"><p style="color:var(--text-dim);margin:0">Use Inspect and tap a thing to change it.</p></div></div>' +
+    '<div id="wsSide"><div><h3>The view</h3><div id="wsViewBox"><canvas id="wsView"></canvas></div><div id="wsViewBar">' +
+    '<button id="wsLookL" title="Turn left">\u21b6</button><button id="wsLookFwd" title="Step forward">\u2191</button><button id="wsLookR" title="Turn right">\u21b7</button></div>' +
+    '<p id="wsViewNote" style="font-size:10.5px;color:var(--text-dim);margin:4px 0 0">Inspect a square to look from it.</p></div>' +
+    '<div id="wsToolPanel"></div><div><h3>Selected</h3><div id="wsInspect"><p style="color:var(--text-dim);margin:0">Use Inspect and tap a thing to change it.</p></div></div>' +
     '<div><h3>Checks</h3><ul id="wsProblems"></ul></div><div id="wsStatus"></div></div></div>';
   document.body.appendChild(root);
 
@@ -554,7 +797,7 @@ function edNewDraft(size, start) {
       var b = document.createElement('button');
       b.textContent = t[1]; b.title = t[2];
       b.setAttribute('aria-pressed', WS.tool === t[0] ? 'true' : 'false');
-      b.addEventListener('click', function () { WS.tool = t[0]; renderTools(); });
+      b.addEventListener('click', function () { WS.tool = t[0]; WS.linkFrom = null; WS.pasting = false; renderTools(); renderToolPanel(); draw(); });
       h.appendChild(b);
     });
     if (WS.tool === 'thing' || WS.tool === 'terrain') {
@@ -584,7 +827,7 @@ function edNewDraft(size, start) {
     WS.draft.floors.forEach(function (f, i) {
       var b = document.createElement('button'); b.textContent = String(i + 1); b.title = f.name;
       b.setAttribute('aria-pressed', i === WS.fi ? 'true' : 'false');
-      b.addEventListener('click', function () { WS.fi = i; WS.sel = null; renderFloors(); inspect(); draw(); });
+      b.addEventListener('click', function () { WS.fi = i; WS.sel = null; WS.block = null; WS.region = null; renderFloors(); renderToolPanel(); inspect(); draw(); });
       h.appendChild(b);
     });
     var add = document.createElement('button'); add.textContent = '+ Floor'; add.title = 'Add a floor below the last';
@@ -597,6 +840,13 @@ function edNewDraft(size, start) {
     var nm = document.createElement('input'); nm.value = F().name || ''; nm.maxLength = 40; nm.setAttribute('aria-label', 'Floor name');
     nm.addEventListener('change', function () { var v = nm.value.trim() || 'Level ' + (WS.fi + 1); change(function () { F().name = v; return true; }); });
     h.appendChild(nm);
+    if (typeof MSDDMat !== 'undefined' && MSDDMat.ZONES) {
+      var zs = document.createElement('select'); zs.setAttribute('aria-label', 'Look of this floor'); zs.title = 'How this floor looks in 3D';
+      zs.style.cssText = 'height:28px;background:var(--ink);color:var(--text);border:1px solid var(--line);font-size:11px';
+      zs.innerHTML = '<option value="">Look: as the game picks</option>' + Object.keys(MSDDMat.ZONES).map(function (z) { return '<option value="' + z + '"' + (F().zone === z ? ' selected' : '') + '>Look: ' + (MSDDMat.ZONES[z].name || z) + '</option>'; }).join('');
+      zs.addEventListener('change', function () { change(function () { if (zs.value) F().zone = zs.value; else delete F().zone; return true; }); });
+      h.appendChild(zs);
+    }
     var sp = document.createElement('span'); sp.className = 'sep'; h.appendChild(sp);
     [['\u2191', 'Move this floor up', -1], ['\u2193', 'Move this floor down', 1]].forEach(function (m) {
       var b = document.createElement('button'); b.textContent = m[0]; b.title = m[1];
@@ -612,6 +862,9 @@ function edNewDraft(size, start) {
     });
     h.appendChild(del);
   }
+
+  var REG_COL = ['#c9a24a', '#5a9ac9', '#9ac95a', '#c95a8a', '#8a5ac9', '#c97a3a', '#3ac9a8', '#c9c93a'];
+  function regionColour(f, id) { var ks = Object.keys(f.regions || {}); return REG_COL[Math.max(0, ks.indexOf(id)) % REG_COL.length]; }
 
   /* ---- drawing ---- */
   var TERR_COL = { water: '#2c5a78', embers: '#8a3a18', fog: '#5a5a64', antimagic: '#4a2a6a', holy: '#8a7a3a', rubble: '#5a4a3a',
@@ -642,6 +895,8 @@ function edNewDraft(size, start) {
       g.fillStyle = '#3a3128'; g.fillRect(px, py, s, s);
       var t = f.terrain[k];
       if (t) { g.globalAlpha = .75; g.fillStyle = TERR_COL[t] || '#555'; g.fillRect(px + 1, py + 1, s - 2, s - 2); g.globalAlpha = 1; }
+      var rg = f.regionMap && f.regionMap[k];
+      if (rg && (WS.tool === 'region' || !t)) { g.globalAlpha = WS.tool === 'region' ? .32 : .12; g.fillStyle = regionColour(f, rg); g.fillRect(px, py, s, s); g.globalAlpha = 1; }
       if (bad[k]) { g.strokeStyle = '#e0573a'; g.lineWidth = 2; g.strokeRect(px + 2, py + 2, s - 4, s - 4); g.lineWidth = 1; }
       var ft = f.features[k];
       if (ft) {
@@ -670,10 +925,34 @@ function edNewDraft(size, start) {
     g.save(); g.translate(ex, ey); g.rotate(a); g.fillStyle = '#7fd08a';
     g.beginPath(); g.moveTo(s * .34, 0); g.lineTo(-s * .22, -s * .24); g.lineTo(-s * .22, s * .24); g.closePath(); g.fill(); g.restore();
     }
+    // links: lever to gate, teleporter to landing
+    edLinks(f).forEach(function (l) {
+      var a = l.from.split(',').map(Number), b2 = l.to.split(',').map(Number);
+      g.strokeStyle = l.kind === 'tele' ? 'rgba(160,120,230,.85)' : 'rgba(242,196,90,.85)'; g.lineWidth = 2; g.setLineDash([5, 4]);
+      g.beginPath(); g.moveTo(a[0] * s + s / 2, a[1] * s + s / 2); g.lineTo(b2[0] * s + s / 2, b2[1] * s + s / 2); g.stroke(); g.setLineDash([]);
+      g.fillStyle = g.strokeStyle; g.beginPath(); g.arc(b2[0] * s + s / 2, b2[1] * s + s / 2, Math.max(2, s / 8), 0, Math.PI * 2); g.fill(); g.lineWidth = 1;
+    });
+    if (WS.linkFrom && WS.tool === 'link') { var lf = WS.linkFrom.split(',').map(Number); g.strokeStyle = '#f2c45a'; g.lineWidth = 3; g.strokeRect(lf[0] * s + 2, lf[1] * s + 2, s - 4, s - 4); g.lineWidth = 1; }
+    // the 3D view's eye
+    if (WS.look && WS.look.fi === WS.fi) {
+      var lx = WS.look.x * s + s / 2, ly = WS.look.y * s + s / 2, la = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][WS.lookF];
+      g.save(); g.translate(lx, ly); g.rotate(la); g.strokeStyle = '#7fd0ff'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(-s * .2, -s * .3); g.lineTo(s * .35, 0); g.lineTo(-s * .2, s * .3); g.stroke(); g.restore(); g.lineWidth = 1;
+    }
+    // the selected block, and a paste waiting for its place
+    if (WS.block && WS.tool === 'block') {
+      var bb = WS.block; g.strokeStyle = '#7fd0ff'; g.setLineDash([4, 3]); g.lineWidth = 2;
+      g.strokeRect(bb.x0 * s + 1, bb.y0 * s + 1, (bb.x1 - bb.x0 + 1) * s - 2, (bb.y1 - bb.y0 + 1) * s - 2); g.setLineDash([]); g.lineWidth = 1;
+    }
+    if (WS.pasting && WS.clip && WS.hover) {
+      g.fillStyle = 'rgba(127,208,255,.18)'; g.strokeStyle = '#7fd0ff';
+      g.fillRect(WS.hover[0] * s, WS.hover[1] * s, WS.clip.w * s, WS.clip.h * s);
+      g.strokeRect(WS.hover[0] * s + .5, WS.hover[1] * s + .5, WS.clip.w * s - 1, WS.clip.h * s - 1);
+    }
     // a drag in progress
-    if (WS.drag && (WS.tool === 'carve' || WS.tool === 'rock')) {
+    if (WS.drag && (WS.tool === 'carve' || WS.tool === 'rock' || WS.tool === 'block') && !WS.pasting) {
       var d = WS.drag, x0 = Math.min(d.x0, d.x1), y0 = Math.min(d.y0, d.y1), x1 = Math.max(d.x0, d.x1), y1 = Math.max(d.y0, d.y1);
-      g.fillStyle = WS.tool === 'carve' ? 'rgba(127,208,138,.25)' : 'rgba(0,0,0,.45)';
+      g.fillStyle = WS.tool === 'carve' ? 'rgba(127,208,138,.25)' : WS.tool === 'block' ? 'rgba(127,208,255,.15)' : 'rgba(0,0,0,.45)';
       g.fillRect(x0 * s, y0 * s, (x1 - x0 + 1) * s, (y1 - y0 + 1) * s);
       g.strokeStyle = '#f2c45a'; g.strokeRect(x0 * s + .5, y0 * s + .5, (x1 - x0 + 1) * s - 1, (y1 - y0 + 1) * s - 1);
     }
@@ -690,7 +969,7 @@ function edNewDraft(size, start) {
     return true;
   }
   function afterChange() {
-    saveDraft(); draw();
+    saveDraft(); draw(); preview();
     clearTimeout(WS.timer); WS.timer = setTimeout(runChecks, 250);
   }
   function saveDraft() { try { localStorage.setItem(DRAFT_KEY(), JSON.stringify(WS.draft)); } catch (e) {} }
@@ -756,7 +1035,36 @@ function edNewDraft(size, start) {
     } else if (WS.tool === 'entry') {
       var same = f.entry[0] === c.x && f.entry[1] === c.y;
       change(function () { return edSetEntry(f, c.x, c.y, same ? f.entryFacing + 1 : f.entryFacing); });
-    } else if (WS.tool === 'select') { WS.sel = [c.x, c.y]; inspect(); draw(); }
+    } else if (WS.tool === 'select') {
+      WS.sel = [c.x, c.y];
+      if (!edRock(f, c.x, c.y)) { if (!WS.look || WS.look.x !== c.x || WS.look.y !== c.y || WS.look.fi !== WS.fi) WS.lookF = bestFacing(f, c.x, c.y); WS.look = { fi: WS.fi, x: c.x, y: c.y }; }
+      inspect(); draw(); preview();
+    } else if (WS.tool === 'link') {
+      var k = edKey(c.x, c.y), ft = f.features[k];
+      if (!WS.linkFrom) {
+        if (ft && (ED_OPENERS.indexOf(ft.type) >= 0 || ft.type === 'teleporter')) { WS.linkFrom = k; status(ft.type === 'teleporter' ? 'Now tap the square it sends the party to.' : 'Now tap the portcullis, door or grate it opens.'); }
+        else if (ft && ED_GATES.indexOf(ft.type) >= 0 && ft.needsLever) { change(function () { return edUnlink(f, k); }); status('Unlinked.'); }
+        else status('Tap a lever, a plate or a teleporter first. Tap a linked gate to unlink it.');
+      } else {
+        var from = WS.linkFrom, src = f.features[from]; WS.linkFrom = null;
+        if (src && src.type === 'teleporter') { if (change(function () { return edAim(f, from, c.x, c.y); })) status('The teleporter sends the party to ' + k + '.'); else status('Not there: pick an open square.'); }
+        else if (change(function () { return edLink(WS.draft, f, from, k); })) status('Linked: ' + (src.type === 'plate' ? 'the plate' : 'the lever') + ' opens the ' + (f.features[k].type === 'secretDoor' ? 'grate' : f.features[k].type) + '.');
+        else status('That cannot be opened by a lever: pick a portcullis, a door or a grate.');
+      }
+      draw();
+    } else if (WS.tool === 'region') {
+      var filled = 0;
+      change(function () { filled = edFloodRegion(f, c.x, c.y, WS.region); return filled > 0; });
+      if (filled) status((WS.region ? 'The room is now ' + ((f.regions || {})[WS.region] || {}).name : 'Painted out') + ' (' + filled + ' squares). Drag to paint square by square.');
+    } else if (WS.tool === 'block' && WS.pasting && WS.clip) {
+      var clip = WS.clip;
+      if (change(function () { return edPaste(f, clip, c.x, c.y); })) { status('Pasted. Tap again to paste another, or choose another tool.'); WS.block = { x0: c.x, y0: c.y, x1: Math.min(f.w - 1, c.x + clip.w - 1), y1: Math.min(f.h - 1, c.y + clip.h - 1) }; }
+    }
+  }
+  function bestFacing(f, x, y) {                 // look down the longest open run
+    var best = 1, len = -1;
+    for (var d = 0; d < 4; d++) { var n = 0, cx = x, cy = y; while (n < 20 && !edWall(f, cx, cy, d)) { cx += ED_DX[d]; cy += ED_DY[d]; n++; } if (n > len) { len = n; best = d; } }
+    return best;
   }
 
   var cv = el('wsGrid');
@@ -764,7 +1072,7 @@ function edNewDraft(size, start) {
     var c = cellAt(ev); if (!c.ok) return;
     cv.setPointerCapture(ev.pointerId);
     WS.drag = { x0: c.x, y0: c.y, x1: c.x, y1: c.y, last: edKey(c.x, c.y) };
-    if (WS.tool !== 'carve' && WS.tool !== 'rock') applyAt(c, true);
+    if (WS.tool !== 'carve' && WS.tool !== 'rock' && !(WS.tool === 'block' && !WS.pasting)) applyAt(c, true);
     draw();
   });
   cv.addEventListener('pointermove', function (ev) {
@@ -772,20 +1080,128 @@ function edNewDraft(size, start) {
     var c = cellAt(ev); if (!c.ok) return;
     WS.drag.x1 = c.x; WS.drag.y1 = c.y;
     var k = edKey(c.x, c.y);
-    if ((WS.tool === 'terrain' || WS.tool === 'erase') && k !== WS.drag.last) { WS.drag.last = k; applyAt(c, false); }
-    if (WS.tool === 'carve' || WS.tool === 'rock') draw();
+    if ((WS.tool === 'terrain' || WS.tool === 'erase' || WS.tool === 'region') && k !== WS.drag.last) { WS.drag.last = k; if (WS.tool === 'region') { WS.drag.first = false; change(function () { return edPaintRegion(F(), c.x, c.y, WS.region); }); } else applyAt(c, false); }
+    if (WS.tool === 'carve' || WS.tool === 'rock' || (WS.tool === 'block' && !WS.pasting)) draw();
   });
   function endDrag() {
     var d = WS.drag; WS.drag = null;
     if (!d) return;
     var caught = 0;
     if (WS.tool === 'carve') change(function () { var ok = edCarve(F(), d.x0, d.y0, d.x1, d.y1); caught = edCatchStairs(WS.draft, WS.fi); return ok; });
+    if (WS.tool === 'block' && !WS.pasting) { WS.block = { x0: Math.min(d.x0, d.x1), y0: Math.min(d.y0, d.y1), x1: Math.max(d.x0, d.x1), y1: Math.max(d.y0, d.y1) }; renderToolPanel(); }
     if (caught) status('The stairs from floor ' + WS.fi + ' come down into it' + (caught > 1 ? ' (' + caught + ' staircases).' : '.'));
     else if (WS.tool === 'rock') change(function () { return edFill(F(), d.x0, d.y0, d.x1, d.y1); });
     draw();
   }
   cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointerleave', function () { if (WS.pasting) { WS.hover = null; draw(); } });
+  cv.addEventListener('pointermove', function (ev) { if (!WS.pasting) return; var c = cellAt(ev); WS.hover = c.ok ? [c.x, c.y] : null; draw(); });
   cv.addEventListener('pointercancel', function () { WS.drag = null; draw(); });
+
+  /* ---- the panel for the tool in hand ---- */
+  function renderToolPanel() {
+    var h = el('wsToolPanel'), f = F(), html = '';
+    if (WS.tool === 'region') {
+      html = '<h3>Regions on this floor</h3>';
+      var regs = f.regions || {};
+      Object.keys(regs).forEach(function (id) {
+        html += '<div class="reg"><span class="sw" style="background:' + regionColour(f, id) + '"></span><button data-reg="' + escH(id) + '" aria-pressed="' + (WS.region === id) + '" style="flex:1;text-align:left">' + escH(regs[id].name) + '</button></div>';
+      });
+      html += '<button id="wsRegNew">+ Region</button><button id="wsRegNone" aria-pressed="' + (WS.region === null) + '">Paint out</button>';
+      if (WS.region && regs[WS.region]) {
+        var r = regs[WS.region];
+        html += '<input id="wsRegName" maxlength="40" value="' + escH(r.name) + '" aria-label="Region name">' +
+          '<textarea id="wsRegLook" maxlength="240" placeholder="What the party reads on walking in">' + escH(r.look || '') + '</textarea>' +
+          '<select id="wsRegHab" aria-label="Habitat">' + ED_HABITATS.map(function (x) { return '<option value="' + x + '"' + ((r.habitat || '') === x ? ' selected' : '') + '>' + (x ? 'Wanderers: ' + x : 'Wanderers: the floor\u2019s own') + '</option>'; }).join('') + '</select>' +
+          '<button id="wsRegDel">Remove region</button>';
+      }
+      html += '<p style="font-size:10.5px;color:var(--text-dim);margin:2px 0 0">Choose a region, then tap a room to fill it up to its walls and doors, or drag to paint square by square.</p>';
+    } else if (WS.tool === 'block') {
+      var b = WS.block;
+      html = '<h3>Block</h3>' + (b ? '<p style="font-size:11px;margin:0 0 6px">' + (b.x1 - b.x0 + 1) + ' \u00d7 ' + (b.y1 - b.y0 + 1) + ' selected</p>' : '<p style="font-size:11px;color:var(--text-dim);margin:0 0 6px">Drag across the grid to select.</p>') +
+        '<button id="wsCopy"' + (b ? '' : ' disabled') + '>Copy</button><button id="wsCut"' + (b ? '' : ' disabled') + '>Cut</button><button id="wsDelBlock"' + (b ? '' : ' disabled') + '>Fill with rock</button>' +
+        '<button id="wsPaste"' + (WS.clip ? '' : ' disabled') + ' aria-pressed="' + !!WS.pasting + '">' + (WS.pasting ? 'Pasting\u2026' : 'Paste') + '</button>' +
+        (WS.clip ? '<p style="font-size:11px;margin:2px 0 6px">Holding ' + WS.clip.w + ' \u00d7 ' + WS.clip.h + '. <button id="wsRot">Turn \u21bb</button><button id="wsMirX">Mirror \u2194</button><button id="wsMirY">Mirror \u2195</button></p>' : '') +
+        '<h3 style="margin-top:8px">Ready-made rooms</h3>' + Object.keys(ED_STAMPS).map(function (k) { return '<button data-stamp="' + k + '">' + ED_STAMPS[k].label + '</button>'; }).join('') +
+        '<h3 style="margin-top:8px">The whole floor</h3><button id="wsFRot">Turn \u21bb</button><button id="wsFMirX">Mirror \u2194</button><button id="wsFMirY">Mirror \u2195</button>';
+    } else if (WS.tool === 'link') {
+      html = '<h3>Link</h3><p style="font-size:11px;color:var(--text-dim);margin:0">Tap a lever or plate, then the portcullis, door or grate it opens. Tap a teleporter, then the square it sends the party to. Tap a linked gate to unlink it.</p>';
+    }
+    h.innerHTML = html;
+    h.querySelectorAll('[data-reg]').forEach(function (b) { b.addEventListener('click', function () { WS.region = b.dataset.reg; renderToolPanel(); draw(); }); });
+    var on = function (id, fn) { var e = el(id); if (e) e.addEventListener('click', fn); };
+    on('wsRegNew', function () { var id; change(function () { id = edAddRegion(F(), 'Room ' + (Object.keys(F().regions || {}).length + 1)); return true; }); WS.region = id; renderToolPanel(); });
+    on('wsRegNone', function () { WS.region = null; renderToolPanel(); });
+    on('wsRegDel', function () { var id = WS.region; change(function () { return edRemoveRegion(F(), id); }); WS.region = null; renderToolPanel(); });
+    var rn = el('wsRegName'), rl = el('wsRegLook'), rh = el('wsRegHab');
+    if (rn) rn.addEventListener('change', function () { var id = WS.region; change(function () { F().regions[id].name = rn.value.trim() || 'A room'; return true; }); renderToolPanel(); });
+    if (rl) rl.addEventListener('change', function () { var id = WS.region; change(function () { F().regions[id].look = rl.value.trim(); return true; }); });
+    if (rh) rh.addEventListener('change', function () { var id = WS.region; change(function () { if (rh.value) F().regions[id].habitat = rh.value; else delete F().regions[id].habitat; return true; }); });
+    var B = WS.block;
+    on('wsCopy', function () { WS.clip = edCopy(F(), B.x0, B.y0, B.x1, B.y1); status('Copied. Paste, then tap where its top-left corner goes.'); renderToolPanel(); });
+    on('wsCut', function () { WS.clip = edCopy(F(), B.x0, B.y0, B.x1, B.y1); change(function () { return edFill(F(), B.x0, B.y0, B.x1, B.y1); }); status('Cut. Paste, then tap where it goes.'); renderToolPanel(); });
+    on('wsDelBlock', function () { change(function () { return edFill(F(), B.x0, B.y0, B.x1, B.y1); }); });
+    on('wsPaste', function () { WS.pasting = !WS.pasting; status(WS.pasting ? 'Tap where the top-left corner goes.' : ''); renderToolPanel(); draw(); });
+    on('wsRot', function () { WS.clip = edBlockRotate(WS.clip); renderToolPanel(); draw(); });
+    on('wsMirX', function () { WS.clip = edBlockMirror(WS.clip, 'x'); renderToolPanel(); draw(); });
+    on('wsMirY', function () { WS.clip = edBlockMirror(WS.clip, 'y'); renderToolPanel(); draw(); });
+    h.querySelectorAll('[data-stamp]').forEach(function (b) { b.addEventListener('click', function () {
+      WS.clip = ED_STAMPS[b.dataset.stamp].make(); WS.pasting = true; status(ED_STAMPS[b.dataset.stamp].label + ': tap where its top-left corner goes.'); renderToolPanel(); draw(); }); });
+    var whole = function (op, say) { change(function () { return edTransformFloor(F(), op); }); WS.block = null; WS.sel = null; WS.look = null; status(say + ' Stairs to other floors pair up again by order: check them.'); renderToolPanel(); inspect(); draw(); };
+    on('wsFRot', function () { whole('rotate', 'The floor turned a quarter.'); });
+    on('wsFMirX', function () { whole('mirrorX', 'The floor mirrored left to right.'); });
+    on('wsFMirY', function () { whole('mirrorY', 'The floor mirrored top to bottom.'); });
+  }
+
+  /* ---- the 3D view of a square ---- */
+  var V3 = null, V3FLOOR = null, V3SIG = '';
+  function preview() {
+    var c = el('wsView'), note = el('wsViewNote');
+    if (!WS.look || typeof MSDD3D === 'undefined') { note.textContent = typeof MSDD3D === 'undefined' ? 'The 3D view is not available here.' : 'Inspect a square to look from it.'; return; }
+    var f = WS.draft.floors[WS.look.fi];
+    if (!f || edRock(f, WS.look.x, WS.look.y)) { WS.look = null; note.textContent = 'Inspect a square to look from it.'; return; }
+    if (V3 === null) {
+      try {
+        var img = null;
+        if (typeof ATLAS_DATA !== 'undefined' && typeof Image !== 'undefined') { img = new Image(); img.src = ATLAS_DATA; }
+        V3 = MSDD3D.create(c, { minis: typeof MitzMinis !== 'undefined' ? MitzMinis : null, atlasImg: img, atlasIndex: typeof ATLAS_INDEX !== 'undefined' ? ATLAS_INDEX : {} }) || false;
+      } catch (e) { V3 = false; }
+    }
+    if (!V3) { note.textContent = 'This device cannot draw the 3D view.'; return; }
+    var dpr = window.devicePixelRatio || 1, r = el('wsViewBox').getBoundingClientRect();
+    c.width = Math.max(64, Math.round(r.width * dpr)); c.height = Math.max(48, Math.round(r.height * dpr));
+    var M = allMonsters(), MM = typeof MitzMinis !== 'undefined' ? MitzMinis : null;
+    var zone = f.zone || WS.draft.zone || (typeof MSDDMat !== 'undefined' ? MSDD3D.zoneFor(f, MSDDMat) : null);
+    var hooks = {
+      terrain: function (x, y) { return f.terrain[edKey(x, y)] || null; },
+      dressing: function () { return null; },
+      door: function (key, ft) { return 'shut'; },
+      spent: function () { return false; }, gateOpen: function () { return false; }, leverOn: function () { return false; },
+      trapShown: function () { return true; }, barrierDown: function () { return false; },
+      bridge: function (x, y) { return f.terrain[edKey(x, y)] === 'bridge'; },
+      figures: function (key, ft) {
+        if (ft.type !== 'monster' || !M[ft.ref]) return null;
+        var d = M[ft.ref], fig = MM && MM.forMonster ? MM.forMonster(ft.ref, d) : d.mini;
+        var boss = (d.traits || []).indexOf('boss') >= 0 || ft.boss;
+        return fig ? [{ fig: fig, faction: boss ? 'boss' : 'foe', tall: boss ? 0.72 : 0.6 }] : null;
+      },
+      signature: function () { return String(WS.draft.rev); }
+    };
+    var sig = WS.draft.rev + '|' + WS.look.fi + '|' + zone;
+    try {
+      if (V3FLOOR !== f || V3SIG !== sig) { V3.setFloor(f, zone, hooks); V3FLOOR = f; V3SIG = sig; }
+      V3.render({ x: WS.look.x, z: WS.look.y, yaw: WS.lookF * Math.PI / 2, px: WS.look.x, pz: WS.look.y, dt: 0.016, reduceMotion: true,
+                  loot: null, pitch: 0, nudge: 0, bob: 0, sight: 3.4, dpr: dpr, shadows: true });
+      note.textContent = 'Floor ' + (WS.look.fi + 1) + ', square ' + WS.look.x + ',' + WS.look.y + ', facing ' + ['north', 'east', 'south', 'west'][WS.lookF] + '.';
+    } catch (e) { note.textContent = 'The 3D view could not draw this: ' + e.message; }
+  }
+  el('wsLookL').addEventListener('click', function () { WS.lookF = (WS.lookF + 3) % 4; preview(); draw(); });
+  el('wsLookR').addEventListener('click', function () { WS.lookF = (WS.lookF + 1) % 4; preview(); draw(); });
+  el('wsLookFwd').addEventListener('click', function () {
+    if (!WS.look) return; var f = WS.draft.floors[WS.look.fi];
+    if (!edWall(f, WS.look.x, WS.look.y, WS.lookF)) { WS.look.x += ED_DX[WS.lookF]; WS.look.y += ED_DY[WS.lookF]; }
+    preview(); draw();
+  });
 
   /* ---- the inspector: a thing's settings ---- */
   function opts(list, cur) {
@@ -821,6 +1237,11 @@ function edNewDraft(size, start) {
       html += '<label>Trapped<select data-k="trap"><option value="">No</option>' + opts(ED_TRAPS.map(function (x) { return [x, x]; }), ft.trap || '') + '</select></label>';
     }
     if (ft.type === 'trap') html += '<label>Kind<select data-k="kind">' + opts(ED_TRAPS.map(function (x) { return [x, x]; }), ft.kind) + '</select></label>';
+    if (ED_OPENERS.indexOf(ft.type) >= 0) html += '<p style="margin:0 0 8px">' + (ft.id && edLinks(f).some(function (l) { return l.from === k; }) ? 'Opens what the line points to.' : '<span style="color:#f0b8a8">Opens nothing yet: use Link.</span>') + '</p>';
+    if (ft.type === 'lever') html += '<label>What the party hears when it is pulled<textarea data-k="note" maxlength="200">' + escH(ft.note || '') + '</textarea></label>';
+    if (ft.type === 'plate') html += '<label>Or make it a trap<select data-k="trap"><option value="">No trap</option>' + opts(ED_TRAPS.map(function (x) { return [x, x]; }), ft.trap || '') + '</select></label>';
+    if (ED_GATES.indexOf(ft.type) >= 0 && ft.needsLever) html += '<p style="margin:0 0 8px">Opened by ' + escH(ft.needsLever) + '. (Link tool: tap it to unlink.)</p>';
+    if (ft.type === 'teleporter') html += '<p style="margin:0 0 8px">' + (ft.at ? 'Sends the party to ' + ft.at.join(',') + '.' : '<span style="color:#f0b8a8">Goes nowhere yet: use Link.</span>') + '</p>';
     if ('text' in ft || ['staff', 'exit', 'textTrigger', 'secretDoor'].indexOf(ft.type) >= 0)
       html += '<label>What the party reads<textarea data-k="text" maxlength="240">' + escH(ft.text || '') + '</textarea></label>';
     html += '<button id="wsDelThing" style="height:30px;min-height:0;font-size:11px">Remove it</button>';
@@ -1117,12 +1538,18 @@ function edNewDraft(size, start) {
     fillParties();
     el('wsName').value = WS.draft.name || '';
     root.classList.add('on');
-    renderTools(); renderFloors(); inspect();
-    requestAnimationFrame(function () { draw(); runChecks(); });
+    renderTools(); renderFloors(); renderToolPanel(); inspect();
+    requestAnimationFrame(function () { draw(); runChecks(); if (!WS.look) { var f0 = WS.draft.floors[0]; WS.look = { fi: 0, x: f0.entry[0], y: f0.entry[1] }; WS.lookF = f0.entryFacing || 1; } preview(); });
   }
   function close() { root.classList.remove('on'); }
 
   el('wsClose').addEventListener('click', close);
+  el('wsMore').addEventListener('click', function () {
+    var on = el('wsHead').classList.toggle('more');
+    el('wsMore').setAttribute('aria-expanded', on ? 'true' : 'false');
+    el('wsMore').innerHTML = on ? 'Less \u25b4' : 'More \u25be';
+    setTimeout(draw, 0);
+  });
   el('wsCoverBtn').addEventListener('click', openCover);
   el('wsItemsBtn').addEventListener('click', function () { openLib('items'); });
   el('wsMonBtn').addEventListener('click', function () { openLib('monsters'); });
