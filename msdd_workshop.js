@@ -204,6 +204,68 @@ function edCatchStairs(draft, i) {
   return n;
 }
 
+/* ---- v7.1 (E3 part 2): your own items and monsters ----
+   Each starts from one the game has (so it keeps its slot, its class rules,
+   its use and its mini) and changes the name, the words and the numbers,
+   within limits that keep it fair. */
+var ED_DIE = [4, 6, 8, 10, 12];
+function edClamp(v, lo, hi, d) { v = Number(v); if (!isFinite(v)) v = d; return Math.max(lo, Math.min(hi, Math.round(v))); }
+function edSlug(name) { return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'thing'; }
+function edDice(d, def) {
+  d = Array.isArray(d) ? d : def;
+  var n = edClamp(d[0], 1, 6, def[0]), sides = ED_DIE.indexOf(+d[1]) >= 0 ? +d[1] : def[1], plus = edClamp(d[2], 0, 12, def[2]);
+  return [n, sides, plus];
+}
+/* An item of your own, from base (an item definition) and the changes asked for. */
+function edMakeItem(base, ch, taken) {
+  ch = ch || {};
+  var it = JSON.parse(JSON.stringify(base));
+  var name = String(ch.name || base.name).trim().slice(0, 32) || base.name;
+  var id = ch.id || ('it.ws.' + edSlug(name));
+  if (!ch.id && taken) { var n = 2, b = id; while (taken[id]) id = b + '-' + n++; }
+  it.id = id; it.name = name;
+  it.desc = String(ch.desc == null ? base.desc || '' : ch.desc).slice(0, 200);
+  it.value = edClamp(ch.value == null ? base.value : ch.value, 0, 3000, base.value || 0);
+  if (base.slot === 'weapon') it.damage = edDice(ch.damage || base.damage, base.damage || [1, 6, 0]);
+  if (base.slot === 'armor' || base.slot === 'shield') it.defenseBonus = edClamp(ch.defenseBonus == null ? base.defenseBonus : ch.defenseBonus, 0, 8, base.defenseBonus || 1);
+  if (base.slot === 'trinket') {
+    it.defenseBonus = edClamp(ch.defenseBonus == null ? base.defenseBonus || 0 : ch.defenseBonus, -3, 3, 0);
+    it.hitBonus = edClamp(ch.hitBonus == null ? base.hitBonus || 0 : ch.hitBonus, -3, 3, 0);
+    if (!it.defenseBonus) delete it.defenseBonus; if (!it.hitBonus) delete it.hitBonus;
+  }
+  if (it.use && it.use.dice) it.use.dice = edDice(ch.useDice || it.use.dice, it.use.dice);
+  if ((base.tags || []).indexOf('key') >= 0) { it.keyId = id; it.flags = ['quest']; it.value = 0; }
+  else if (ch.quest) it.flags = ['quest']; else delete it.flags;
+  delete it.shopFrom; delete it.cursed; delete it.unknown;
+  return it;
+}
+/* A monster of your own, the same way. */
+function edMakeMonster(base, ch, taken) {
+  ch = ch || {};
+  var m = JSON.parse(JSON.stringify(base));
+  var name = String(ch.name || base.name).trim().slice(0, 32) || base.name;
+  var id = ch.id || ('mn.ws.' + edSlug(name));
+  if (!ch.id && taken) { var n = 2, b = id; while (taken[id]) id = b + '-' + n++; }
+  m.id = id; m.name = name;
+  m.level = edClamp(ch.level == null ? base.level : ch.level, 1, 12, base.level);
+  m.bp = edDice(ch.bp || base.bp, base.bp);
+  m.defense = edClamp(ch.defense == null ? base.defense : ch.defense, 8, 24, base.defense);
+  m.attacks = (base.attacks || []).map(function (a, i) {
+    var c = (ch.attacks || [])[i] || {};
+    return { name: String(c.name || a.name).slice(0, 24), toHit: edClamp(c.toHit == null ? a.toHit : c.toHit, 0, 12, a.toHit),
+             damage: edDice(c.damage || a.damage, a.damage), reach: a.reach };
+  });
+  var traits = (base.traits || []).filter(function (t) { return t !== 'boss'; });
+  if (ch.boss != null ? ch.boss : (base.traits || []).indexOf('boss') >= 0) traits.push('boss');
+  m.traits = traits;
+  if (traits.indexOf('boss') >= 0) m.groupSize = [1, 1, 0];
+  // what it is worth follows how tough it is
+  var tough = m.level * 25 + m.bp[0] * m.bp[1] * 2 + (m.defense - 10) * 6;
+  m.xp = edClamp(ch.xp == null ? Math.max(10, Math.round(tough * (traits.indexOf('boss') >= 0 ? 2.5 : 1))) : ch.xp, 5, 5000, 25);
+  delete m.phases;                         // a base's own phases name its own summons and lines
+  return m;
+}
+
 /* ---- the cover: what the adventure is, how it is won, what Simz sells ---- */
 var ED_WINS = {
   staff: { flag: 'gotStaff',    label: 'Find the staff',     text: 'The staff is yours. The gate can be closed.' },
@@ -281,6 +343,8 @@ function edPackFrom(draft, base) {
     var ft = f.features[k];
     if (c.win === 'boss' && ft.type === 'monster' && ft.boss) ft.quest = true;
   }); });
+  Object.keys(draft.items || {}).forEach(function (id) { pk.items[id] = JSON.parse(JSON.stringify(draft.items[id])); });
+  Object.keys(draft.monsters || {}).forEach(function (id) { pk.monsters[id] = JSON.parse(JSON.stringify(draft.monsters[id])); });
   if (c.shop) pk.shopStock = c.shop.filter(function (id) { return pk.items[id]; });
   pk.testParties = base.testParties || [];
   return pk;
@@ -388,6 +452,22 @@ function edNewDraft(size, start) {
     '#wsShop{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 10px;max-height:220px;overflow:auto;border:1px solid var(--line);padding:6px 8px}',
     '#wsShop label{flex-direction:row;align-items:center;gap:6px;margin:0;color:var(--text);font-size:11.5px}',
     '#wsCover .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}',
+    '#wsLib{position:fixed;inset:0;z-index:46;background:rgba(0,0,0,.72);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 10px}',
+    '#wsLib.on{display:flex}',
+    '#wsLib .box{background:var(--ink);border:1px solid var(--gold);padding:16px;max-width:640px;width:100%}',
+    '#wsLib h3{color:var(--gold);font-size:13px;margin:0 0 4px}',
+    '#wsLib .intro{font-size:11px;color:var(--text-dim);margin:0 0 10px;line-height:1.5}',
+    '#wsLibList{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 12px}',
+    '#wsLibList button{height:30px;min-height:0;font-size:11px;padding:0 10px}',
+    '#wsLibList button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold)}',
+    '#wsLibForm label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-dim);margin:0 0 9px}',
+    '#wsLibForm .row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}',
+    '#wsLibForm .row label{flex:1 1 90px}',
+    '#wsLibForm input,#wsLibForm textarea,#wsLibForm select{background:rgba(255,255,255,.03);color:var(--text);border:1px solid var(--line);font-size:13px;padding:6px 8px;font-family:inherit;min-width:0}',
+    '#wsLibForm textarea{min-height:48px;resize:vertical}',
+    '#wsLibForm fieldset{border:1px solid var(--line);padding:8px 10px 2px;margin:0 0 10px}',
+    '#wsLibForm legend{font-size:11px;color:var(--gold);padding:0 4px}',
+    '#wsLib .acts{display:flex;gap:8px;justify-content:space-between;margin-top:6px;flex-wrap:wrap}',
     '#wsTest{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:45;display:none;gap:8px;align-items:center;',
     '  background:var(--ink);border:1px solid var(--gold);padding:5px 6px 5px 12px;font-size:11px;color:var(--gold);box-shadow:0 6px 24px rgba(0,0,0,.6)}',
     '#wsTest.on{display:flex}',
@@ -421,6 +501,7 @@ function edNewDraft(size, start) {
     '<select id="wsParty" aria-label="Play-test party" style="height:32px;background:var(--ink);color:var(--text);border:1px solid var(--line);font-size:11px"></select>' +
     '<button id="wsPlay" class="go" title="Play it now with a ready-made party">Play-test</button>' +
     '<button id="wsCoverBtn" title="Name, story, how it is won, what the shop sells">Cover\u2026</button>' +
+    '<button id="wsItemsBtn" title="Your own items">Items\u2026</button><button id="wsMonBtn" title="Your own monsters">Monsters\u2026</button>' +
     '<button id="wsKeep" title="Keep it in your adventures, to play from the New Game list">Save to my adventures</button>' +
     '<button id="wsClose">Close</button></div>' +
     '<div id="wsFloors"></div>' +
@@ -451,6 +532,14 @@ function edNewDraft(size, start) {
     '<div class="acts"><button id="wsCoverCancel">Cancel</button><button id="wsCoverOk" class="go">Done</button></div></div>';
   document.body.appendChild(cover);
 
+  var lib = document.createElement('div');
+  lib.id = 'wsLib';
+  lib.innerHTML = '<div class="box" role="dialog" aria-labelledby="wsLibTitle"><h3 id="wsLibTitle"></h3><p class="intro" id="wsLibIntro"></p>' +
+    '<div id="wsLibList"></div><div id="wsLibForm"></div>' +
+    '<p id="wsLibNote" style="font-size:11px;color:var(--text-dim);min-height:15px;margin:0 0 6px"></p>' +
+    '<div class="acts"><button id="wsLibDel">Delete it</button><span style="flex:1"></span><button id="wsLibClose">Close</button><button id="wsLibSave" class="go">Save it</button></div></div>';
+  document.body.appendChild(lib);
+
   var bar = document.createElement('div');
   bar.id = 'wsTest';
   bar.innerHTML = '<span>Play-testing — nothing here is saved</span><button id="wsLeave">Back to the Workshop</button>';
@@ -480,6 +569,10 @@ function edNewDraft(size, start) {
       h.appendChild(sel);
     }
   }
+
+  /* The game's items and monsters with the draft's own among them. */
+  function allItems() { var o = {}, b = BUNDLED_BASE.items; Object.keys(b).forEach(function (k) { o[k] = b[k]; }); Object.keys(WS.draft.items || {}).forEach(function (k) { o[k] = WS.draft.items[k]; }); return o; }
+  function allMonsters() { var o = {}, b = BUNDLED_BASE.monsters; Object.keys(b).forEach(function (k) { o[k] = b[k]; }); Object.keys(WS.draft.monsters || {}).forEach(function (k) { o[k] = WS.draft.monsters[k]; }); return o; }
 
   /* ---- the floors ---- */
   function renderFloors() {
@@ -703,10 +796,9 @@ function edNewDraft(size, start) {
     var html = '<p style="margin:0 0 8px;color:var(--text-dim)">Square ' + k + (t ? ' · ' + escH(t) : '') + '</p>';
     if (!ft) { h.innerHTML = html + '<p style="margin:0;color:var(--text-dim)">Nothing here.</p>'; return; }
     html += '<p style="margin:0 0 8px"><b>' + escH(ft.type) + '</b></p>';
-    var M = typeof MONSTERS !== 'undefined' ? MONSTERS : (BUNDLED_BASE || {}).monsters || {};
-    var I = typeof ITEMS !== 'undefined' ? ITEMS : (BUNDLED_BASE || {}).items || {};
+    var M = allMonsters(), I = allItems();
     if (ft.type === 'monster') html += '<label>Who<select data-k="ref">' + opts(Object.keys(M).sort(function (a, b) { return (M[a].level - M[b].level) || M[a].name.localeCompare(M[b].name); })
-      .map(function (id) { return [id, M[id].name + ' (level ' + M[id].level + ((M[id].traits || []).indexOf('boss') >= 0 ? ', boss' : '') + ')']; }), ft.ref) + '</select></label>';
+      .map(function (id) { return [id, M[id].name + ' (level ' + M[id].level + ((M[id].traits || []).indexOf('boss') >= 0 ? ', boss' : '') + ')' + (/^mn\.ws\./.test(id) ? ' \u2605 yours' : '')]; }), ft.ref) + '</select></label>';
     if (ft.type === 'monster')
       html += '<label><span><input type="checkbox" data-k="boss"' + (ft.boss ? ' checked' : '') + '> The boss' +
               (edCover(WS.draft).win === 'boss' ? ' (beating it wins)' : '') + '</span></label>';
@@ -718,11 +810,12 @@ function edNewDraft(size, start) {
     }
     if (ft.type === 'door') {
       html += '<label><span><input type="checkbox" data-k="locked"' + (ft.locked ? ' checked' : '') + '> Locked</span></label>';
-      if (ft.locked) html += '<label>Key<select data-k="keyId">' + opts(ED_KEYS.map(function (id) { return [id, (I[id] || {}).name || id]; }), ft.keyId) + '</select></label>';
+      if (ft.locked) html += '<label>Key<select data-k="keyId">' + opts(Object.keys(I).filter(function (id) { return (I[id].tags || []).indexOf('key') >= 0; })
+        .map(function (id) { return [id, I[id].name]; }), ft.keyId) + '</select></label>';
     }
     if (ft.type === 'chest') {
       html += '<label>Holds<select data-k="item"><option value="">Just gold</option>' + opts(Object.keys(I).filter(function (id) { return (I[id].value > 0 || (I[id].tags || []).indexOf('key') >= 0) && !I[id].cursed; })
-        .sort().map(function (id) { return [id, I[id].name]; }), ft.item || '') + '</select></label>';
+        .sort().map(function (id) { return [id, I[id].name + (/^it\.ws\./.test(id) ? ' \u2605 yours' : '')]; }), ft.item || '') + '</select></label>';
       html += '<label>Trapped<select data-k="trap"><option value="">No</option>' + opts(ED_TRAPS.map(function (x) { return [x, x]; }), ft.trap || '') + '</select></label>';
     }
     if (ft.type === 'trap') html += '<label>Kind<select data-k="kind">' + opts(ED_TRAPS.map(function (x) { return [x, x]; }), ft.kind) + '</select></label>';
@@ -835,6 +928,9 @@ function edNewDraft(size, start) {
           Object.keys(f.features).forEach(function (k) { delete f.features[k].to; delete f.features[k].at; }); return f; });
         change(function () {
           WS.draft.floors = fl; WS.draft.name = pk.name || WS.draft.name; WS.draft.author = pk.author || WS.draft.author;
+          WS.draft.items = {}; WS.draft.monsters = {};
+          Object.keys(pk.items || {}).forEach(function (k) { if (/^it\.ws\./.test(k)) WS.draft.items[k] = pk.items[k]; });
+          Object.keys(pk.monsters || {}).forEach(function (k) { if (/^mn\.ws\./.test(k)) WS.draft.monsters[k] = pk.monsters[k]; });
           var win = Object.keys(ED_WINS).filter(function (k) { return pk.rules && pk.rules.victory && ED_WINS[k].flag === pk.rules.victory.flag; })[0];
           WS.draft.cover = { blurb: pk.blurb || '', gold: (pk.rules || {}).startingGold, win: win || 'staff', winText: ((pk.rules || {}).victory || {}).text || '', shop: pk.shopStock || null };
           return true;
@@ -850,7 +946,7 @@ function edNewDraft(size, start) {
 
   /* ---- the cover ---- */
   function openCover() {
-    var c = edCover(WS.draft), I = BUNDLED_BASE.items, std = BUNDLED_BASE.shopStock || [];
+    var c = edCover(WS.draft), I = allItems(), std = BUNDLED_BASE.shopStock || [];
     el('wsAuthor').value = WS.draft.author || '';
     el('wsBlurb').value = c.blurb;
     el('wsWin').innerHTML = Object.keys(ED_WINS).map(function (k) { return '<option value="' + k + '"' + (k === c.win ? ' selected' : '') + '>' + ED_WINS[k].label + '</option>'; }).join('');
@@ -877,6 +973,124 @@ function edNewDraft(size, start) {
     });
     cover.classList.remove('on'); inspect();
   });
+
+  /* ---- your own items and monsters ---- */
+  var LIB = { kind: 'items', id: null, base: null };
+  function libStore() { var k = LIB.kind; WS.draft[k] = WS.draft[k] || {}; return WS.draft[k]; }
+  function openLib(kind) {
+    LIB.kind = kind; LIB.id = null; LIB.base = null;
+    el('wsLibTitle').textContent = kind === 'items' ? 'Your items' : 'Your monsters';
+    el('wsLibIntro').textContent = kind === 'items'
+      ? 'Start from an item the game has: yours keeps its kind, who may use it and what it does, and takes your name, words and numbers. It can then go in chests and in the shop.'
+      : 'Start from a creature the game has: yours keeps its look and its gifts (poison, undead and so on), and takes your name and numbers. Mark it as a boss to make it the one that wins the adventure.';
+    renderLib(); lib.classList.add('on');
+  }
+  function renderLib() {
+    var store = libStore(), h = el('wsLibList'); h.innerHTML = '';
+    Object.keys(store).sort().forEach(function (id) {
+      var b = document.createElement('button'); b.textContent = store[id].name; b.setAttribute('aria-pressed', LIB.id === id ? 'true' : 'false');
+      b.addEventListener('click', function () { LIB.id = id; LIB.base = null; renderLib(); });
+      h.appendChild(b);
+    });
+    var nb = document.createElement('button'); nb.textContent = '+ New'; nb.setAttribute('aria-pressed', !LIB.id ? 'true' : 'false');
+    nb.addEventListener('click', function () { LIB.id = null; LIB.base = null; renderLib(); });
+    h.appendChild(nb);
+    renderLibForm();
+  }
+  function num(id, v, lo, hi, label) { return '<label>' + label + '<input type="number" id="' + id + '" value="' + v + '" min="' + lo + '" max="' + hi + '" inputmode="numeric"></label>'; }
+  function diceRow(pfx, d, label) {
+    return '<fieldset><legend>' + label + '</legend><div class="row">' + num(pfx + 'N', d[0], 1, 6, 'Dice') +
+      '<label>Sides<select id="' + pfx + 'S">' + ED_DIE.map(function (x) { return '<option' + (x === d[1] ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
+      num(pfx + 'P', d[2], 0, 12, 'Plus') + '</div></fieldset>';
+  }
+  function readDice(pfx) { return [parseInt(el(pfx + 'N').value, 10), parseInt(el(pfx + 'S').value, 10), parseInt(el(pfx + 'P').value, 10)]; }
+  function renderLibForm() {
+    var f = el('wsLibForm'), store = libStore(), cur = LIB.id ? store[LIB.id] : null;
+    var B = LIB.kind === 'items' ? BUNDLED_BASE.items : BUNDLED_BASE.monsters;
+    el('wsLibDel').hidden = !cur; el('wsLibNote').textContent = '';
+    var html = '';
+    if (!cur) {
+      var pool = Object.keys(B).filter(function (k) { return LIB.kind === 'monsters' || (B[k].value > 0 || (B[k].tags || []).indexOf('key') >= 0) && !B[k].cursed; })
+        .sort(function (a, b) { return LIB.kind === 'items' ? (B[a].slot || '').localeCompare(B[b].slot || '') || B[a].name.localeCompare(B[b].name) : B[a].level - B[b].level || B[a].name.localeCompare(B[b].name); });
+      LIB.base = LIB.base && B[LIB.base] ? LIB.base : pool[0];
+      html += '<label>Start from<select id="wsLibBase">' + pool.map(function (k) {
+        var x = B[k], tag = LIB.kind === 'items' ? (x.slot === 'none' ? ((x.tags || []).indexOf('key') >= 0 ? 'key' : 'use') : x.slot) : 'level ' + x.level;
+        return '<option value="' + escH(k) + '"' + (k === LIB.base ? ' selected' : '') + '>' + escH(x.name) + ' (' + tag + ')</option>';
+      }).join('') + '</select></label>';
+    }
+    var src = cur || B[LIB.base];
+    html += '<label>Name<input id="wsLibName" maxlength="32" value="' + escH(cur ? cur.name : '') + '" placeholder="' + escH(src.name) + '"></label>';
+    if (LIB.kind === 'items') {
+      html += '<label>What it says about itself<textarea id="wsLibDesc" maxlength="200">' + escH(cur ? cur.desc : src.desc || '') + '</textarea></label>';
+      html += '<div class="row">' + num('wsLibVal', src.value || 0, 0, 3000, 'Worth (gold)') + '</div>';
+      if (src.slot === 'weapon') html += diceRow('wsLibDmg', src.damage || [1, 6, 0], 'Damage');
+      if (src.slot === 'armor' || src.slot === 'shield') html += '<div class="row">' + num('wsLibDef', src.defenseBonus || 0, 0, 8, 'Defence') + '</div>';
+      if (src.slot === 'trinket') html += '<div class="row">' + num('wsLibDef', src.defenseBonus || 0, -3, 3, 'Defence') + num('wsLibHit', src.hitBonus || 0, -3, 3, 'To hit') + '</div>';
+      if (src.use && src.use.dice) html += diceRow('wsLibUse', src.use.dice, 'Strength (' + src.use.kind + ')');
+      if ((src.tags || []).indexOf('key') < 0) html += '<label><span><input type="checkbox" id="wsLibQuest"' + ((src.flags || []).indexOf('quest') >= 0 && cur ? ' checked' : '') + '> A quest item: it cannot be sold or lost</span></label>';
+      else html += '<p style="font-size:11px;color:var(--text-dim);margin:0 0 8px">A key of your own: choose it for a locked door in Inspect, and put it in a chest.</p>';
+    } else {
+      html += '<div class="row">' + num('wsLibLvl', src.level, 1, 12, 'Level') + num('wsLibDefM', src.defense, 8, 24, 'Defence') + '</div>';
+      html += diceRow('wsLibBp', src.bp, 'Toughness (body points)');
+      (src.attacks || []).forEach(function (a, i) {
+        html += '<fieldset><legend>Attack ' + (i + 1) + (a.reach === 'ranged' ? ' (ranged)' : '') + '</legend><div class="row">' +
+          '<label>Name<input id="wsLibA' + i + 'n" maxlength="24" value="' + escH(a.name) + '"></label>' + num('wsLibA' + i + 'h', a.toHit, 0, 12, 'To hit') + '</div>' +
+          '<div class="row">' + num('wsLibA' + i + 'dN', a.damage[0], 1, 6, 'Dice') +
+          '<label>Sides<select id="wsLibA' + i + 'dS">' + ED_DIE.map(function (x) { return '<option' + (x === a.damage[1] ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select></label>' +
+          num('wsLibA' + i + 'dP', a.damage[2], 0, 12, 'Plus') + '</div></fieldset>';
+      });
+      html += '<label><span><input type="checkbox" id="wsLibBoss"' + ((src.traits || []).indexOf('boss') >= 0 ? ' checked' : '') + '> A boss (fights alone; worth more)</span></label>';
+    }
+    f.innerHTML = html;
+    var bs = el('wsLibBase');
+    if (bs) bs.addEventListener('change', function () { LIB.base = bs.value; renderLibForm(); });
+  }
+  function saveLib() {
+    var store = libStore(), cur = LIB.id ? store[LIB.id] : null;
+    var B = LIB.kind === 'items' ? BUNDLED_BASE.items : BUNDLED_BASE.monsters;
+    var base = cur ? (B[cur.from] || cur) : B[LIB.base], made;
+    var taken = {}; Object.keys(store).forEach(function (k) { taken[k] = 1; });
+    if (LIB.kind === 'items') {
+      var ch = { name: el('wsLibName').value.trim() || base.name + ' (yours)', desc: el('wsLibDesc').value, value: el('wsLibVal').value };
+      if (el('wsLibDmgN')) ch.damage = readDice('wsLibDmg');
+      if (el('wsLibDef')) ch.defenseBonus = el('wsLibDef').value;
+      if (el('wsLibHit')) ch.hitBonus = el('wsLibHit').value;
+      if (el('wsLibUseN')) ch.useDice = readDice('wsLibUse');
+      if (el('wsLibQuest')) ch.quest = el('wsLibQuest').checked;
+      if (cur) ch.id = cur.id;
+      made = edMakeItem(base, ch, taken);
+    } else {
+      var mc = { name: el('wsLibName').value.trim() || base.name + ' (yours)', level: el('wsLibLvl').value, defense: el('wsLibDefM').value,
+                 bp: readDice('wsLibBp'), boss: el('wsLibBoss').checked, attacks: [] };
+      (base.attacks || []).forEach(function (a, i) { mc.attacks.push({ name: el('wsLibA' + i + 'n').value, toHit: el('wsLibA' + i + 'h').value, damage: readDice('wsLibA' + i + 'd') }); });
+      if (cur) mc.id = cur.id;
+      made = edMakeMonster(base, mc, taken);
+    }
+    made.from = cur ? cur.from : LIB.base;
+    change(function () { libStore()[made.id] = made; return true; });
+    LIB.id = made.id; renderLib(); inspect();
+    el('wsLibNote').textContent = 'Saved \u201c' + made.name + '\u201d. ' + (LIB.kind === 'items' ? 'Put it in a chest (Things \u2192 Chest, then Inspect) or the shop (Cover).' : 'Place it with Things \u2192 Monsters, then choose it in Inspect.');
+  }
+  function deleteLib() {
+    if (!LIB.id) return;
+    var id = LIB.id, used = edCountThings(WS.draft, function (ft) { return ft.ref === id || ft.item === id || ft.keyId === id; });
+    change(function () {
+      delete libStore()[id];
+      WS.draft.floors.forEach(function (f) { Object.keys(f.features).forEach(function (k) {     // what used it goes back to plain
+        var ft = f.features[k];
+        if (ft.ref === id) ft.ref = 'mn.goblin';
+        if (ft.item === id) delete ft.item;
+        if (ft.keyId === id) ft.keyId = 'it.key.rust';
+      }); });
+      if (WS.draft.cover && WS.draft.cover.shop) WS.draft.cover.shop = WS.draft.cover.shop.filter(function (x) { return x !== id; });
+      return true;
+    });
+    LIB.id = null; renderLib(); inspect();
+    el('wsLibNote').textContent = used ? 'Deleted. ' + used + ' place' + (used > 1 ? 's' : '') + ' that used it went back to a plain one.' : 'Deleted.';
+  }
+  el('wsLibSave').addEventListener('click', saveLib);
+  el('wsLibDel').addEventListener('click', deleteLib);
+  el('wsLibClose').addEventListener('click', function () { lib.classList.remove('on'); });
 
   /* ---- keeping it ---- */
   function keep() {
@@ -906,6 +1120,8 @@ function edNewDraft(size, start) {
 
   el('wsClose').addEventListener('click', close);
   el('wsCoverBtn').addEventListener('click', openCover);
+  el('wsItemsBtn').addEventListener('click', function () { openLib('items'); });
+  el('wsMonBtn').addEventListener('click', function () { openLib('monsters'); });
   el('wsKeep').addEventListener('click', keep);
   el('wsUndo').addEventListener('click', function () { var d = edUndo(WS.hist, WS.draft); if (d) { WS.draft = d; afterChange(); renderFloors(); inspect(); } });
   el('wsRedo').addEventListener('click', function () { var d = edRedo(WS.hist, WS.draft); if (d) { WS.draft = d; afterChange(); renderFloors(); inspect(); } });
@@ -935,5 +1151,5 @@ function edNewDraft(size, start) {
   }, true);
 
   window.MSDDWorkshop = { open: open, close: close, state: WS, draw: draw, runChecks: runChecks, packNow: packNow, leaveTest: leaveTest,
-                         keep: keep, openCover: openCover, renderFloors: renderFloors };
+                         keep: keep, openCover: openCover, renderFloors: renderFloors, openLib: openLib };
 })();

@@ -317,8 +317,19 @@ pure functions over a floor, and the `workshop` runner (55 checks) tests them.
 
 Checks: workshop W8 (floors and stairs), W9 (the cover and winning).
 
-Next: E3 part 2, your own items and monsters; then more armour and trinkets for
-the base game. Later: E2 (3D preview, mechanisms, regions) and E4 (copy and
+**E3, part 2 (v7.1.1): your own items and monsters.** *Items…* and *Monsters…*
+list the draft's own and make new ones from any the game has. An item keeps its
+slot, tags (so who may use it), reach and use, and takes a name, words, worth
+and numbers: damage dice for a weapon, defence for armour and shields, defence
+and to-hit for a trinket, strength for a draught or scroll, within limits. A
+key of your own opens doors set to it and cannot be sold. A monster keeps its
+mini and traits, and takes a name, level, defence, toughness and each attack's
+name, to-hit and damage; *A boss* makes it fight alone and worth more, and its
+experience follows its numbers. Yours are marked with a star in the inspector's
+lists and can go in chests, the shop and on the map. Deleting one turns
+whatever used it back to a plain one. Checks: workshop W10.
+
+Next: more armour and trinkets for the base game. Later: E2 (3D preview, mechanisms, regions) and E4 (copy and
 paste, stamps, mirror and rotate).
 
 ### One more run (v6.1, the roadmap's v5.5)

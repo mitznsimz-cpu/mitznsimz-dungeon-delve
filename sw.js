@@ -4,7 +4,7 @@
    browser's HTTP cache, so even a new CACHE could hold old files): it took
    several refreshes to see a fix. Now one does, and offline still works.
    Bump CACHE on every release. */
-const CACHE = 'msdd-v7.1.0';
+const CACHE = 'msdd-v7.1.1';
 const ASSETS = [
   './',
   './index.html',

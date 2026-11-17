@@ -16,7 +16,7 @@ const BOOT = grab(src, 'BUNDLED PACK') + grab(src, 'PACK CORE') +
 const names = ['edNewFloor', 'edCarve', 'edFill', 'edSetWall', 'edWall', 'edRock', 'edPaint', 'edPlace', 'edSetEntry',
   'edWallsInStep', 'edPackFrom', 'edProblems', 'edHistory', 'edRecord', 'edUndo', 'edRedo', 'edNewDraft', 'edThing',
   'ED_THINGS', 'ED_TERRAIN', 'ED_SIZES', 'edAddFloor', 'edRemoveFloor', 'edMoveFloor', 'edLinkStairs', 'edPairStairs',
-  'edCover', 'edDraftProblems', 'edCatchStairs', 'ED_WINS', 'validatePack', 'proveSolvable', 'loadPack', 'BUNDLED_BASE'];
+  'edMakeItem', 'edMakeMonster', 'edCover', 'edDraftProblems', 'edCatchStairs', 'ED_WINS', 'validatePack', 'proveSolvable', 'loadPack', 'BUNDLED_BASE'];
 const T = new Function(BOOT + grab(wsrc, 'EDITOR CORE') + '\nreturn {' + names.join(',') + '};')();
 
 let pass = 0, fail = 0;
@@ -193,6 +193,50 @@ console.log('\n[W9] the cover, and how it is won (v7.1)');
   ok('gold is kept within reason', T.edCover({ cover: { gold: 99999 } }).gold === 5000 && T.edCover({ cover: { gold: -5 } }).gold === 0);
   ok('an unknown way to win falls back to the staff', T.edCover({ cover: { win: 'dance' } }).win === 'staff');
   ok('every way to win has a flag the game checks', Object.keys(T.ED_WINS).every(k => /^(gotStaff|beatBoss|reachedExit)$/.test(T.ED_WINS[k].flag)));
+}
+
+console.log('\n[W10] your own items and monsters (v7.1)');
+{
+  const B = T.BUNDLED_BASE;
+  const sw = T.edMakeItem(B.items['it.longsword'], { name: 'Mill-Wheel Blade', desc: 'Notched like a cog.', value: 400, damage: [2, 8, 1] });
+  ok('an item takes its name, words and numbers', sw.id === 'it.ws.mill-wheel-blade' && sw.name === 'Mill-Wheel Blade' && sw.value === 400 && sw.damage.join() === '2,8,1');
+  ok('and keeps its kind and who may use it', sw.slot === 'weapon' && sw.tags.join() === B.items['it.longsword'].tags.join() && sw.reach === 'melee');
+  ok('the base is left alone', B.items['it.longsword'].name === 'Long Sword');
+  const wild = T.edMakeItem(B.items['it.longsword'], { name: 'x'.repeat(80), value: 99999, damage: [40, 7, 99] });
+  ok('numbers are kept within limits', wild.name.length === 32 && wild.value === 3000 && wild.damage.join() === '6,8,12', wild.damage.join());
+  const ring = T.edMakeItem(B.items['it.ring.ward'], { name: 'Miller\'s Ring', defenseBonus: 9, hitBonus: 2 });
+  ok('a trinket: defence and to-hit, within limits', ring.defenseBonus === 3 && ring.hitBonus === 2);
+  const draught = T.edMakeItem(B.items['it.potion'], { name: 'Flour Tonic', useDice: [3, 6, 2] });
+  ok('a draught keeps what it does, with its own strength', draught.use.kind === 'heal' && draught.use.dice.join() === '3,6,2');
+  const key = T.edMakeItem(B.items['it.key.rust'], { name: 'Sluice Key', value: 50 });
+  ok('a key opens doors that name it, and cannot be sold', key.keyId === key.id && key.flags.indexOf('quest') >= 0 && key.value === 0);
+  ok('a second of the same name gets its own id', T.edMakeItem(B.items['it.dagger'], { name: 'Mill-Wheel Blade' }, { 'it.ws.mill-wheel-blade': 1 }).id === 'it.ws.mill-wheel-blade-2');
+  const boss = T.edMakeMonster(B.monsters['mn.goblinChief'], { name: 'The Miller', level: 6, bp: [6, 10, 8], defense: 30, boss: true,
+    attacks: [{ name: 'millstone', toHit: 7, damage: [2, 10, 2] }] });
+  ok('a monster takes its name and numbers', boss.id === 'mn.ws.the-miller' && boss.level === 6 && boss.bp.join() === '6,10,8' && boss.attacks[0].name === 'millstone');
+  ok('within limits', boss.defense === 24);
+  ok('keeps its look and gifts', boss.mini === B.monsters['mn.goblinChief'].mini && boss.traits.indexOf('berserk') >= 0);
+  ok('a boss fights alone, and is worth more', boss.traits.indexOf('boss') >= 0 && boss.groupSize.join() === '1,1,0' && boss.xp > B.monsters['mn.goblinChief'].xp);
+  ok('its base\'s phases are not carried over', !boss.phases);
+  ok('an attack it does not change stays as it was', boss.attacks[1].name === 'shield bash');
+  const meek = T.edMakeMonster(B.monsters['mn.goblinChief'], { boss: false });
+  ok('a boss can be made a plain monster', meek.traits.indexOf('boss') < 0);
+  // into an adventure: a boss of your own, a chest with your blade, a door with your key
+  const d = T.edNewDraft(16, 'box');
+  d.items = { [sw.id]: sw, [key.id]: key }; d.monsters = { [boss.id]: boss };
+  T.edPlace(d.floors[0], 3, 3, { type: 'chest', item: key.id, gold: [1, 4, 0] });
+  T.edPlace(d.floors[0], 5, 5, { type: 'chest', item: sw.id, gold: [1, 4, 0] });
+  T.edSetWall(d.floors[0], 8, 1, 1, true); for (let y = 2; y <= 14; y++) T.edSetWall(d.floors[0], 8, y, 1, true);
+  T.edPlace(d.floors[0], 8, 8, { type: 'door', locked: true, keyId: key.id });
+  T.edSetWall(d.floors[0], 8, 8, 1, false);
+  T.edPlace(d.floors[0], 12, 8, { type: 'monster', ref: boss.id, boss: true });
+  d.cover = { win: 'boss', shop: ['it.potion', sw.id] };
+  const pk = T.edPackFrom(d, T.BUNDLED_BASE);
+  ok('the pack has them', pk.items[sw.id] && pk.items[key.id] && pk.monsters[boss.id]);
+  ok('and Simz sells your blade', pk.shopStock.indexOf(sw.id) >= 0);
+  const pr = T.edProblems(pk, T.validatePack, T.proveSolvable, d).filter(p => p.level === 'error');
+  ok('your key opens your door, your boss wins it: all clear', !pr.length, JSON.stringify(pr));
+  ok('it loads into the game', T.loadPack(JSON.parse(JSON.stringify(pk))).ok);
 }
 
 console.log('\n[W7] the page');
