@@ -197,6 +197,10 @@ console.log('\n[W9] the cover, and how it is won (v7.1)');
   ok('a boss walled in where nobody can reach it is an error', T.edProblems(T.edPackFrom(d, T.BUNDLED_BASE), T.validatePack, T.proveSolvable, d).some(p => p.level === 'error'));
   ok('gold is kept within reason', T.edCover({ cover: { gold: 99999 } }).gold === 5000 && T.edCover({ cover: { gold: -5 } }).gold === 0);
   ok('an unknown way to win falls back to the staff', T.edCover({ cover: { win: 'dance' } }).win === 'staff');
+  const op = T.edNewDraft(12, 'box'); T.edPlace(op.floors[0], 6, 6, T.edThing('exit').make()); op.cover = { win: 'exit' };
+  ok('a way out in the open gets a gentle word (a warning, not an error)', T.edDraftProblems(op).some(p => p.level === 'warning' && /stands in the open/.test(p.text)) && !T.edDraftProblems(op).some(p => p.level === 'error'));
+  T.edPlace(op.floors[0], 6, 6, null); T.edPlace(op.floors[0], 10, 6, T.edThing('exit').make());
+  ok('against a wall, nothing to say', !T.edDraftProblems(op).length);
   ok('every way to win has a flag the game checks', Object.keys(T.ED_WINS).every(k => /^(gotStaff|beatBoss|reachedExit)$/.test(T.ED_WINS[k].flag)));
 }
 
@@ -342,6 +346,7 @@ ok('leaving a play-test brings the real game back from its autosave', /loadFrom\
 ok('the draft is kept on the device', /msdd_workshop/.test(wsrc) && /localStorage\.setItem\(DRAFT_KEY\(\)/.test(wsrc));
 ok('it works offline', /'\.\/msdd_workshop\.js'/.test(fs.readFileSync('./sw.js', 'utf8')));
 ok('the game wins by the way out', /questFlags\.reachedExit = true/.test(src));
+ok('and draws it: an arch of daylight, in 3D and in 2D', /t === 'exit'/.test(fs.readFileSync('./msdd_view3d.js', 'utf8')) && /feat\.type === 'exit'\) \{\s+\/\/ v7\.3\.1/.test(src));
 ok('and by beating a boss placed on the map', /questFlags\.beatBoss = true/.test(src) && /\{ boss: !!\(feat && feat\.boss\) \}/.test(src));
 ok('kept adventures are listed on the chooser', /var mine = mineAll\(\)/.test(src));
 ok('and a save in one reloads after a refresh', /var mine = typeof mineGet === 'function' \? mineGet\(raw\.packId\)/.test(src));

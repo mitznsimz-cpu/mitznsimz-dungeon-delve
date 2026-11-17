@@ -366,6 +366,15 @@ paste, stamps, mirror and rotate).
 
 Checks: workshop W11 (mechanisms), W12 (regions), W13 (blocks and stamps).
 
+**The way out, drawn (v7.3.1).** An `exit` now shows in the view: in 3D a stone
+arch set into a wall of its square with daylight filling it and a little
+spilling onto the floor, and a light that brightens the corridor so it can be
+seen from the far end (a dead end takes its end wall; a square with no wall
+gets an arch standing across it). In 2D, an arch of daylight on the square. Use
+reads *Step out into the daylight*, and the square reads *an archway, and
+daylight beyond it*. The Workshop warns, gently, when a way out stands in the
+open.
+
 ### One more run (v6.1, the roadmap's v5.5)
 
 An endless delve is now a run. When the party falls, the run ends: a card

@@ -511,6 +511,13 @@ function edDraftProblems(draft) {
   if (!edCountThings(draft, need))
     out.push({ level: 'error', text: 'It is won by \u201c' + ED_WINS[c.win].label.toLowerCase() + '\u201d, but there is ' +
               { staff: 'no staff placed', boss: 'no monster marked as the boss', exit: 'no way out placed' }[c.win] + '. Place one, or change how it is won on the cover.', at: null });
+  // a way out shows as an arch in a wall: one standing in the open looks odd
+  draft.floors.forEach(function (f, i) { Object.keys(f.features).forEach(function (k) {
+    if (f.features[k].type !== 'exit') return;
+    var p = k.split(',').map(Number);
+    if (![0, 1, 2, 3].some(function (d) { return edWall(f, p[0], p[1], d); }))
+      out.push({ level: 'warning', floor: f.id, at: p, text: 'Floor ' + (i + 1) + ' at ' + k + ': the way out stands in the open. Put it against a wall and it shows as an arch of daylight in that wall.' });
+  }); });
   var copy = JSON.parse(JSON.stringify(draft.floors));
   edLinkStairs(copy).forEach(function (l) {
     out.push({ level: 'error', floor: l.floor, at: l.at, text: 'Floor ' + (l.i + 1) + ' at ' + l.at.join(',') + ': ' +

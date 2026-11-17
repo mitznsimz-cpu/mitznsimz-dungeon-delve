@@ -76,7 +76,7 @@
   Geo.prototype.count = function () { return this.v.length / 8; };
 
   var GEO_NAMES = ['wall', 'floor', 'water', 'embers', 'holy', 'antimagic', 'ice', 'rotten', 'ceil', 'prop', 'wood', 'iron',
-                   'flame', 'recess', 'bone', 'clay', 'chain', 'stem', 'cap', 'crystal', 'web', 'writ', 'glow', 'barrier', 'mist', 'pit', 'base', 'fountain'];
+                   'flame', 'recess', 'bone', 'clay', 'chain', 'stem', 'cap', 'crystal', 'web', 'writ', 'glow', 'barrier', 'mist', 'pit', 'base', 'fountain', 'day', 'dayfloor'];
   var TERR_GEO = { water: 'water', embers: 'embers', holy: 'holy', antimagic: 'antimagic', ice: 'ice', rotten: 'rotten' };
 
   /* Build a floor. zone: an entry of MSDDMat.ZONES. hooks: what the game knows.
@@ -403,6 +403,31 @@
       if (!up) { out.stairsDown = out.stairsDown || []; out.stairsDown.push([x, y]); }
     } else if (t === 'teleporter') {
       G.glow.lathe(x, 0.006, y, [[0.4, 0], [0.38, 0.004], [0.3, 0.004], [0.28, 0]], 24);
+    } else if (t === 'exit') {
+      // v7.3.1: the way out: an arch set into a wall of the square, daylight
+      // filling it, so it reads as an opening at the end of a passage or in a
+      // room's side. A dead end takes its end wall. Only a square with no wall
+      // at all gets an arch standing free across it.
+      var wd = -1;
+      walls.forEach(function (d) { if (wd < 0 && walls.indexOf((d + 2) % 4) < 0) wd = d; });
+      if (wd < 0 && walls.length) wd = walls[0];
+      if (wd >= 0) {
+        var fx = FWD[wd][0], fz = FWD[wd][1], across = fz !== 0;      // the wall runs across x when it faces north or south
+        var cx = x + fx * 0.47, cz = y + fz * 0.47;
+        var sx = across ? 0.36 : 0, sz = across ? 0 : 0.36;
+        G.prop.box(cx - sx, 0.45, cz - sz, across ? 0.12 : 0.1, 0.9, across ? 0.1 : 0.12);
+        G.prop.box(cx + sx, 0.45, cz + sz, across ? 0.12 : 0.1, 0.9, across ? 0.1 : 0.12);
+        G.prop.box(cx, 0.86, cz, across ? 0.84 : 0.1, 0.12, across ? 0.1 : 0.84);
+        G.day.box(x + fx * 0.495, 0.4, y + fz * 0.495, across ? 0.6 : 0.01, 0.8, across ? 0.01 : 0.6);
+        G.dayfloor.lathe(x + fx * 0.25, 0.005, y + fz * 0.25, [[0.3, 0], [0.28, 0.003], [0.0, 0.003]], 20);
+      } else {
+        var px = ns ? 0.42 : 0, pz = ns ? 0 : 0.42;
+        G.prop.box(x - px, 0.45, y - pz, 0.12, 0.9, 0.12); G.prop.box(x + px, 0.45, y + pz, 0.12, 0.9, 0.12);
+        G.prop.box(x, 0.93, y, ns ? 1.0 : 0.16, 0.12, ns ? 0.16 : 1.0);
+        G.day.box(x, 0.44, y, ns ? 0.72 : 0.02, 0.86, ns ? 0.02 : 0.72);
+        G.dayfloor.lathe(x, 0.005, y, [[0.36, 0], [0.34, 0.003], [0.0, 0.003]], 24);
+      }
+      out.lamps.push([x, 0.55, y]);
     } else if (t === 'staff') {
       if (!spent) { G.wood.box(x, 0.03, y, 0.04, 0.04, 0.7, true, 0.6); G.glow.lathe(x + 0.2, 0.03, y + 0.27, [[0.03, 0], [0.035, 0.03], [0, 0.06]], 8); }
     }
@@ -793,6 +818,7 @@
         flat('bone', '#d9ccad', null, 0.2); flat('clay', '#8a5a3a', null, 0.15); flat('stem', '#d8d0c0');
         flat('cap', '#20302c', lin(emitC, 1.2), 0.3); flat('crystal', '#5a3a8a', lin(emitC, 1.4), 1.0);
         flat('glow', '#000000', lin('#ffc860', 1.6 * flick)); flat('fountain', '#0c2a3a', lin('#3a90c0', 0.5), 1.5);
+        flat('day', '#1a2230', lin('#b8cce6', 0.75)); flat('dayfloor', '#3a3a36', lin('#9fb4d0', 0.12));
         // chest lids, swinging up and back for the chest being opened; and its coins
         lids.forEach(function (l) {
           var ang = l.open ? LID_OPEN : 0, shake = 0;

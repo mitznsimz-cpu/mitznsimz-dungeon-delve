@@ -860,7 +860,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v7.3</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v7.3.1</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -14937,7 +14937,8 @@ function underfootLabel(feat, x, y) {
                 // v4.8
                 plate: 'a flagstone that moves', portcullis: 'an iron portcullis', fountain: 'a fountain',
                 altar: 'an altar', statue: 'a statue on a plinth', remains: 'what is left of a delver',
-                campsite: 'an old camp', merchant: 'a travelling merchant', prisoner: 'a prisoner in chains' }[feat.type];
+                campsite: 'an old camp', merchant: 'a travelling merchant', prisoner: 'a prisoner in chains',
+                exit: 'an archway, and daylight beyond it' }[feat.type];
   if (!label) return null;
   var spent = consumed.indexOf(x + ',' + y) >= 0;
   if (feat.type === 'chest' && spent) return 'an empty chest';
@@ -14981,6 +14982,7 @@ function interactable(feat, x, y) {
     case 'npc':         return 'Speak to them';
     case 'barrier':     return 'Try the ward';
     case 'teleporter':  return 'Step onto the sigil';
+    case 'exit':        return 'Step out into the daylight';
     default:            return null;
   }
 }
@@ -15449,6 +15451,17 @@ function drawFeatureBase(g, feat, cell, near, far, px, ty, by) {
     g.ellipse(midX, bot - h * 0.03, wdt * 0.30, h * 0.055, 0, 0, Math.PI * 2);
     g.fill();
     g.strokeStyle = metal(0.4); g.lineWidth = Math.max(0.5, 1.4 * s); g.stroke();
+  }
+
+  if (feat.type === 'exit') {                              // v7.3.1: an arch full of daylight
+    var aw = wdt * 0.62, ah = h * 0.62, ax = midX - aw / 2, ay = bot - ah;
+    var day = g.createLinearGradient(0, ay, 0, bot);
+    day.addColorStop(0, 'rgba(232,242,255,' + (0.85 * (1 - fog(far) * 0.6)) + ')'); day.addColorStop(1, 'rgba(232,242,255,0.25)');
+    g.fillStyle = day; g.fillRect(ax, ay, aw, ah);
+    g.globalAlpha = 0.35 * (1 - fog(far) * 0.6); g.fillStyle = PAL.text;
+    g.beginPath(); g.ellipse(midX, bot - h * 0.03, wdt * 0.42, h * 0.05, 0, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1;
+    g.strokeStyle = ink(0.9); g.lineWidth = Math.max(1, 3 * s);
+    g.strokeRect(ax, ay, aw, ah);
   }
 
   if (feat.type === 'teleporter' || feat.type === 'spinner') {
