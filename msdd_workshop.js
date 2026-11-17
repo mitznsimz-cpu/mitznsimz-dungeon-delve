@@ -231,7 +231,9 @@ function edMakeItem(base, ch, taken) {
   if (base.slot === 'trinket') {
     it.defenseBonus = edClamp(ch.defenseBonus == null ? base.defenseBonus || 0 : ch.defenseBonus, -3, 3, 0);
     it.hitBonus = edClamp(ch.hitBonus == null ? base.hitBonus || 0 : ch.hitBonus, -3, 3, 0);
-    if (!it.defenseBonus) delete it.defenseBonus; if (!it.hitBonus) delete it.hitBonus;
+    it.bpBonus = edClamp(ch.bpBonus == null ? base.bpBonus || 0 : ch.bpBonus, 0, 10, 0);
+    it.mpBonus = edClamp(ch.mpBonus == null ? base.mpBonus || 0 : ch.mpBonus, 0, 8, 0);
+    ['defenseBonus', 'hitBonus', 'bpBonus', 'mpBonus'].forEach(function (k) { if (!it[k]) delete it[k]; });
   }
   if (it.use && it.use.dice) it.use.dice = edDice(ch.useDice || it.use.dice, it.use.dice);
   if ((base.tags || []).indexOf('key') >= 0) { it.keyId = id; it.flags = ['quest']; it.value = 0; }
@@ -1025,7 +1027,8 @@ function edNewDraft(size, start) {
       html += '<div class="row">' + num('wsLibVal', src.value || 0, 0, 3000, 'Worth (gold)') + '</div>';
       if (src.slot === 'weapon') html += diceRow('wsLibDmg', src.damage || [1, 6, 0], 'Damage');
       if (src.slot === 'armor' || src.slot === 'shield') html += '<div class="row">' + num('wsLibDef', src.defenseBonus || 0, 0, 8, 'Defence') + '</div>';
-      if (src.slot === 'trinket') html += '<div class="row">' + num('wsLibDef', src.defenseBonus || 0, -3, 3, 'Defence') + num('wsLibHit', src.hitBonus || 0, -3, 3, 'To hit') + '</div>';
+      if (src.slot === 'trinket') html += '<div class="row">' + num('wsLibDef', src.defenseBonus || 0, -3, 3, 'Defence') + num('wsLibHit', src.hitBonus || 0, -3, 3, 'To hit') +
+        num('wsLibBpB', src.bpBonus || 0, 0, 10, 'Body') + num('wsLibMpB', src.mpBonus || 0, 0, 8, 'Magic') + '</div>';
       if (src.use && src.use.dice) html += diceRow('wsLibUse', src.use.dice, 'Strength (' + src.use.kind + ')');
       if ((src.tags || []).indexOf('key') < 0) html += '<label><span><input type="checkbox" id="wsLibQuest"' + ((src.flags || []).indexOf('quest') >= 0 && cur ? ' checked' : '') + '> A quest item: it cannot be sold or lost</span></label>';
       else html += '<p style="font-size:11px;color:var(--text-dim);margin:0 0 8px">A key of your own: choose it for a locked door in Inspect, and put it in a chest.</p>';
@@ -1055,6 +1058,7 @@ function edNewDraft(size, start) {
       if (el('wsLibDmgN')) ch.damage = readDice('wsLibDmg');
       if (el('wsLibDef')) ch.defenseBonus = el('wsLibDef').value;
       if (el('wsLibHit')) ch.hitBonus = el('wsLibHit').value;
+      if (el('wsLibBpB')) { ch.bpBonus = el('wsLibBpB').value; ch.mpBonus = el('wsLibMpB').value; }
       if (el('wsLibUseN')) ch.useDice = readDice('wsLibUse');
       if (el('wsLibQuest')) ch.quest = el('wsLibQuest').checked;
       if (cur) ch.id = cur.id;

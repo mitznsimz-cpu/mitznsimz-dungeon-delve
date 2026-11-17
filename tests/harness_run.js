@@ -15,7 +15,7 @@ const BOOT = grab('BUNDLED PACK') + grab('PACK CORE') +
 const names = ['makeRng', 'makeCharacter', 'maxBP', 'maxMP', 'defense', 'meleeToHit', 'varBonus', 'ITEMS',
   'makeItem', 'itemLabel', 'sellValue', 'doIdentify', 'equipItem', 'rollFind', 'gearPool', 'RARITY', 'FIND',
   'VARIANTS', 'UNLOCKS', 'RUN_BONUS_DEPTH', 'STRANGE_ZONES', 'emptyMeta', 'cleanMeta', 'hasUnlock', 'recordRun',
-  'unlockedVariants', 'metaKit', 'delveZones', 'pickZone', 'blowText', 'runLines', 'serialise', 'deserialise', 'CLASSES', 'validPortal', 'describeWhere'];
+  'unlockedVariants', 'metaKit', 'delveZones', 'pickZone', 'blowText', 'runLines', 'serialise', 'deserialise', 'CLASSES', 'validPortal', 'describeWhere', 'unequipItem', 'canUse', 'SHOP_STOCK', 'itemShopFrom'];
 const T = new Function(BOOT + grab('PARTY CORE') + '\n' + grab('COMBAT CORE') + '\n' + grab('SAVE CORE') + '\n' +
   grab('WORLD CORE') + '\n' + grab('EVENT CORE') + '\n' + grab('TOWN CORE') + '\n' + grab('RUN CORE') +
   '\nreturn {' + names.join(',') + '};')();
@@ -88,7 +88,7 @@ for (let k = 0; k < chests; k++) {
   else if (it.rarity === 'master') { master++; if (it.bonus !== 2) known = -999; }
   else plain++;
   if (it.rarity && !it.unknown) known = -999;
-  if (!it.rarity && it.unknown) known = -999;
+  if (!it.rarity && it.unknown && it.slot !== 'trinket') known = -999;
 }
 const rate = found / chests;
 ok('about one plain chest in six holds kit', rate > 0.12 && rate < 0.2, rate.toFixed(3));
@@ -98,7 +98,8 @@ ok('the same seed finds the same thing', JSON.stringify(T.rollFind(T.makeRng(5),
 ok('the gear on offer grows with depth', T.gearPool(1).length < T.gearPool(4).length, T.gearPool(1).length + ' ' + T.gearPool(4).length);
 ok('never a quest item or a cursed one', T.gearPool(9).every(k => !(T.ITEMS[k].flags || []).length && !T.ITEMS[k].cursed));
 // six to seven chests a floor, roughly: a run of three floors should see a couple unidentified
-const perRun = 3 * 6.5 * rate * (fine + master) / found;
+let trinkets = 0; { const r2 = T.makeRng(77); for (let k = 0; k < chests; k++) { const it = T.rollFind(r2, 1 + (k % 8)); if (it && it.slot === 'trinket') trinkets++; } }
+const perRun = 3 * 6.5 * rate * (fine + master + trinkets) / found;      // v7.2: found trinkets come unidentified too
 ok('a three-floor run finds a couple of unidentified pieces', perRun >= 1.5 && perRun <= 3.5, perRun.toFixed(2));
 
 const sword = T.makeItem('it.longsword'); sword.rarity = 'master'; sword.bonus = 2; sword.unknown = true;
@@ -183,6 +184,34 @@ ok('recall leaves a portal below the first floor', /PORTAL = \{ floor: floor\.id
 ok('the town offers it, and it closes once used', /id="portalBtn"/.test(src) && /PORTAL = null;\s+\/\/ it closes behind you/.test(src));
 ok('a wipe closes it', /PORTAL = null;\s+\/\/ a wipe closes any portal/.test(src));
 ok('the portal and the seed words are saved', /portal: PORTAL,/.test(src) && /seedText: typeof st\.generated\.seedText === 'string'/.test(src));
+
+console.log('\n[U11] more armour and trinkets (v7.2)');
+{
+  const add = ['it.studded', 'it.brigandine', 'it.elvenmail', 'it.lamellar', 'it.wardenplate', 'it.ring.vigour', 'it.bead.wizard', 'it.charm.owl', 'it.collar.iron', 'it.heartstone'];
+  ok('ten new pieces', add.every(k => T.ITEMS[k]), add.filter(k => !T.ITEMS[k]).join());
+  ok('five armours, five trinkets', add.filter(k => T.ITEMS[k].slot === 'armor').length === 5 && add.filter(k => T.ITEMS[k].slot === 'trinket').length === 5);
+  const rogue = T.makeCharacter('R', 'rogue', stats);
+  ok('a rogue may wear studded leather and elven mail', T.canUse(rogue, T.makeItem('it.studded')) && T.canUse(rogue, T.makeItem('it.elvenmail')));
+  ok('but not brigandine', !T.canUse(rogue, T.makeItem('it.brigandine')));
+  const f = T.makeCharacter('F', 'fighter', stats), bp0 = T.maxBP(f);
+  f.pack = [T.makeItem('it.ring.vigour')]; T.equipItem(f, 0);
+  ok('a Ring of Vigour: +5 body', T.maxBP(f) === bp0 + 5);
+  f.bp = T.maxBP(f); T.unequipItem(f, 'trinket');
+  ok('taken off, body falls back, and the wounds that are left fit', T.maxBP(f) === bp0 && f.bp === bp0);
+  const m = T.makeCharacter('M', 'mage', stats), mp0 = T.maxMP(m);
+  m.pack = [T.makeItem('it.bead.wizard')]; T.equipItem(m, 0);
+  ok('a Wizard\'s Bead: +4 magic for a caster', T.maxMP(m) === mp0 + 4);
+  const f2 = T.makeCharacter('G', 'fighter', stats); f2.pack = [T.makeItem('it.bead.wizard')]; T.equipItem(f2, 0);
+  ok('and nothing for a fighter, who has no magic', T.maxMP(f2) === 0);
+  const c = T.makeCharacter('C', 'fighter', stats), d0 = T.defense(c), h0 = T.meleeToHit(c);
+  c.pack = [T.makeItem('it.collar.iron')]; T.equipItem(c, 0);
+  ok('an Iron Collar: +2 defence, -1 to hit', T.defense(c) === d0 + 2 && T.meleeToHit(c) === h0 - 1);
+  ok('the Warden\'s Harness and the Heartstone are never sold', T.SHOP_STOCK.indexOf('it.wardenplate') < 0 && T.SHOP_STOCK.indexOf('it.heartstone') < 0);
+  ok('and only turn up deep', T.itemShopFrom('it.wardenplate') >= 5 && T.gearPool(3).indexOf('it.wardenplate') < 0 && T.gearPool(5).indexOf('it.wardenplate') >= 0);
+  ok('the other eight are in the shop', add.filter(k => T.SHOP_STOCK.indexOf(k) >= 0).length === 8);
+  const tr = (() => { const r = T.makeRng(11); for (let k = 0; k < 4000; k++) { const it = T.rollFind(r, 6); if (it && it.slot === 'trinket') return it; } })();
+  ok('a trinket found in a delve is unidentified, with no rarity', tr && tr.unknown && !tr.rarity && T.itemLabel(tr) === 'Unidentified trinket');
+}
 
 console.log('\n' + (fail ? 'FAILED' : 'PASSED') + ' \u2014 ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

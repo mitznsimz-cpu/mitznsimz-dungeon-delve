@@ -1560,6 +1560,131 @@
       "reach": "melee",
       "desc": "Deals 1d10+1. Axe, hook and spike on a long haft; it reaches past the two in front (at −1 to hit).",
       "shopFrom": 3
+    },
+    "it.studded": {
+      "name": "Studded Leather",
+      "slot": "armor",
+      "tags": [
+        "armor",
+        "armor.light"
+      ],
+      "defenseBonus": 3,
+      "value": 55,
+      "desc": "+3 defence. Leather riveted with iron; still light enough for a rogue.",
+      "shopFrom": 2,
+      "id": "it.studded"
+    },
+    "it.brigandine": {
+      "name": "Brigandine",
+      "slot": "armor",
+      "tags": [
+        "armor"
+      ],
+      "defenseBonus": 5,
+      "value": 150,
+      "desc": "+5 defence. Plates sewn inside canvas, quiet on the stairs.",
+      "shopFrom": 3,
+      "id": "it.brigandine"
+    },
+    "it.elvenmail": {
+      "name": "Elven Mail",
+      "slot": "armor",
+      "tags": [
+        "armor",
+        "armor.light"
+      ],
+      "defenseBonus": 4,
+      "value": 300,
+      "desc": "+4 defence. Fine rings, light as a shirt: the best a rogue can wear.",
+      "shopFrom": 3,
+      "id": "it.elvenmail"
+    },
+    "it.lamellar": {
+      "name": "Lamellar Coat",
+      "slot": "armor",
+      "tags": [
+        "armor"
+      ],
+      "defenseBonus": 3,
+      "value": 40,
+      "desc": "+3 defence. Laced strips of lacquered hide; cheap and honest.",
+      "shopFrom": 1,
+      "id": "it.lamellar"
+    },
+    "it.wardenplate": {
+      "name": "Warden's Harness",
+      "slot": "armor",
+      "tags": [
+        "armor"
+      ],
+      "defenseBonus": 7,
+      "value": 520,
+      "desc": "+7 defence. The old wardens' plate, blackened, never sold in any shop.",
+      "id": "it.wardenplate",
+      "shopFrom": 5
+    },
+    "it.ring.vigour": {
+      "name": "Ring of Vigour",
+      "slot": "trinket",
+      "tags": [
+        "trinket"
+      ],
+      "bpBonus": 5,
+      "value": 170,
+      "desc": "+5 body. A warm copper band that keeps the wearer on their feet.",
+      "shopFrom": 2,
+      "id": "it.ring.vigour"
+    },
+    "it.bead.wizard": {
+      "name": "Wizard's Bead",
+      "slot": "trinket",
+      "tags": [
+        "trinket"
+      ],
+      "mpBonus": 4,
+      "value": 180,
+      "desc": "+4 magic for a caster. A blue glass bead on a cord; it hums near spells.",
+      "shopFrom": 2,
+      "id": "it.bead.wizard"
+    },
+    "it.charm.owl": {
+      "name": "Owl-Feather Charm",
+      "slot": "trinket",
+      "tags": [
+        "trinket"
+      ],
+      "hitBonus": 1,
+      "defenseBonus": 1,
+      "value": 260,
+      "desc": "+1 to hit, +1 defence. Sharp eyes, and a little warning.",
+      "shopFrom": 3,
+      "id": "it.charm.owl"
+    },
+    "it.collar.iron": {
+      "name": "Iron Collar",
+      "slot": "trinket",
+      "tags": [
+        "trinket"
+      ],
+      "defenseBonus": 2,
+      "hitBonus": -1,
+      "value": 90,
+      "desc": "+2 defence, −1 to hit. Heavy, stiff, and it keeps your throat whole.",
+      "shopFrom": 2,
+      "id": "it.collar.iron"
+    },
+    "it.heartstone": {
+      "name": "Heartstone",
+      "slot": "trinket",
+      "tags": [
+        "trinket"
+      ],
+      "bpBonus": 8,
+      "mpBonus": 2,
+      "value": 480,
+      "desc": "+8 body, +2 magic for a caster. A red stone that beats, faintly. Found, never bought.",
+      "id": "it.heartstone",
+      "shopFrom": 5
     }
   },
   "monsters": {
@@ -4513,7 +4638,15 @@
     "it.rope",
     "it.crowbar",
     "it.oil",
-    "it.caltrops"
+    "it.caltrops",
+    "it.lamellar",
+    "it.studded",
+    "it.brigandine",
+    "it.elvenmail",
+    "it.ring.vigour",
+    "it.bead.wizard",
+    "it.collar.iron",
+    "it.charm.owl"
   ],
   "prices": {
     "restPerBP": 1,

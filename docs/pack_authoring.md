@@ -217,6 +217,15 @@ Trick at the first tier, Melt Away and Knife Flurry at the second, and
 Assassinate at the third. Tags begin `weapon`, `armor`, `shield`,
 `trinket`, `consumable`, `key`, `quest` or `tool`; anything else is refused.
 
+A worn item may carry `defenseBonus` and `hitBonus`; a trinket may also carry
+`bpBonus` (more body) and `mpBonus` (more magic, for a caster) since v7.2.
+
+**Winning (v7.1).** `rules.victory.flag` names what wins: `gotStaff` (take a
+`staff` feature), `beatBoss` (beat a `monster` feature with `"boss": true`;
+give it `"quest": true` too, so the solver insists it can be reached) or
+`reachedExit` (step onto an `exit` feature). The Workshop sets all of this
+from its cover page.
+
 ---
 
 ## The rules a pack cannot break

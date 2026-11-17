@@ -329,7 +329,18 @@ experience follows its numbers. Yours are marked with a star in the inspector's
 lists and can go in chests, the shop and on the map. Deleting one turns
 whatever used it back to a plain one. Checks: workshop W10.
 
-Next: more armour and trinkets for the base game. Later: E2 (3D preview, mechanisms, regions) and E4 (copy and
+**More armour and trinkets (v7.2).** Five armours: Lamellar Coat (+3, from
+floor 1), Studded Leather (+3, light, so a rogue may wear it, floor 2),
+Brigandine (+5, floor 3), Elven Mail (+4, light, the best a rogue can wear,
+floor 3) and the Warden's Harness (+7, never sold, found from floor 5). Five
+trinkets: Ring of Vigour (+5 body), Wizard's Bead (+4 magic, casters only),
+Iron Collar (+2 defence, -1 to hit), Owl-Feather Charm (+1 to hit, +1 defence)
+and the Heartstone (+8 body, +2 magic; found from floor 5, never sold). A
+trinket may now add body (`bpBonus`) and magic (`mpBonus`); taking one off
+brings body and magic back within the new maximum. Delve chests can hold
+trinkets too, and a trinket found there comes unidentified. The Workshop's
+own trinkets can set body and magic. Checks: run U11. The balance simulator's
+parties use fixed kit, so its results are unchanged. Later: E2 (3D preview, mechanisms, regions) and E4 (copy and
 paste, stamps, mirror and rotate).
 
 ### One more run (v6.1, the roadmap's v5.5)
