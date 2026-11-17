@@ -295,9 +295,31 @@ pure functions over a floor, and the `workshop` runner (55 checks) tests them.
   floor back in. *New floor…* starts from rock, an empty box or a generated
   floor, at 12 to 30 squares a side.
 
-Next stages: E2 the 3D preview beside the grid, mechanisms (levers, plates,
-portcullises) and regions; E3 several floors joined by stairs, with a cover
-page; E4 copy and paste, room stamps, mirror and rotate.
+**E3, part 1 (v7.1): several floors, the cover, my adventures.**
+
+- **Floors** are stacked, floor 2 under floor 1. The floor bar switches,
+  adds (*+ Floor*, solid rock), renames, moves and removes them. Squares open
+  on the floor above show faintly through the rock, to line rooms up.
+- **Stairs** pair up between neighbouring floors in reading order. Placing
+  stairs down puts stairs up on the same square below when that square is open,
+  and carving a room under unpartnered stairs catches them. Deeper floors begin
+  at their stairs up; only the first floor has a Start. Unpaired stairs are
+  listed as problems on their square.
+- **The cover:** author, blurb, how it is won (*find the staff*, *beat the boss*:
+  a monster marked as the boss in the inspector, or *find the way out*), the words
+  shown on winning, starting gold, and what Simz sells (tick boxes; *As Ashkeld*
+  resets it). A win condition with nothing placed to win by is an error.
+- **Save to my adventures** (no errors needed first) keeps the pack on the
+  device; it is listed in the New Game list, and a game in it continues after a
+  refresh like any other.
+- In the game, reaching a way out now wins (it did nothing before), and beating
+  a monster placed as the boss wins when that is the adventure's goal.
+
+Checks: workshop W8 (floors and stairs), W9 (the cover and winning).
+
+Next: E3 part 2, your own items and monsters; then more armour and trinkets for
+the base game. Later: E2 (3D preview, mechanisms, regions) and E4 (copy and
+paste, stamps, mirror and rotate).
 
 ### One more run (v6.1, the roadmap's v5.5)
 

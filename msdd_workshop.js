@@ -22,6 +22,8 @@ var ED_THINGS = [
   { id: 'staff',      label: 'Goal: the staff',  glyph: '★', make: function () { return { type: 'staff', quest: true, text: 'A staff rests on a broken cradle, humming to itself in the dark.' }; } },
   { id: 'exit',       label: 'Goal: a way out',  glyph: '⌂', make: function () { return { type: 'exit', text: 'Daylight, at last.' }; } },
   { id: 'monster',    label: 'Monsters',         glyph: '☠', make: function () { return { type: 'monster', ref: 'mn.goblin' }; } },
+  { id: 'stairsDown', label: 'Stairs down',      glyph: '\u25bc', make: function () { return { type: 'stairsDown' }; } },
+  { id: 'stairsUp',   label: 'Stairs up',        glyph: '\u25b2', make: function () { return { type: 'stairsUp' }; } },
   { id: 'door',       label: 'Door',             glyph: '▯', make: function () { return { type: 'door' }; } },
   { id: 'lockedDoor', label: 'Locked door',      glyph: '▮', make: function () { return { type: 'door', locked: true, keyId: 'it.key.rust', text: 'A locked door.' }; } },
   { id: 'secretDoor', label: 'Secret door',      glyph: '░', make: function () { return { type: 'secretDoor', text: 'A seam, barely there.' }; } },
@@ -47,7 +49,7 @@ function edNewFloor(w, h, start, id) {
             entry: [1, 1], entryFacing: 1, encounterTable: ['mn.goblin', 'mn.direRat', 'mn.kobold'], monsterScale: 1 };
   for (var i = 0; i < w * h; i++) f.cells.push(ED_ROCK | 15);
   if (start === 'box') edCarve(f, 1, 1, w - 2, h - 2);
-  else edCarve(f, 1, 1, Math.min(4, w - 2), Math.min(3, h - 2));       // a first small room for the entry
+  else if (start !== 'solid') edCarve(f, 1, 1, Math.min(4, w - 2), Math.min(3, h - 2));       // a first small room for the entry
   return f;
 }
 
@@ -123,6 +125,121 @@ function edSetEntry(f, x, y, facing) {
   return true;
 }
 
+/* ---- v7.1 (E3): several floors ----
+   Floors are stacked: floor 2 lies under floor 1. Stairs pair up between
+   neighbouring floors, in reading order (top row first): the first stairs down
+   on a floor lead to the first stairs up on the floor below, and back. Put a
+   pair on the same square and they are one staircase straight down. */
+function edFloorId(draft) {
+  var n = 1;
+  while (draft.floors.some(function (f) { return f.id === 'w' + n; })) n++;
+  return 'w' + n;
+}
+function edAddFloor(draft, w, h, start, at) {
+  // a floor below starts as solid rock: the party arrives by the stairs, not at a start of its own
+  var f = edNewFloor(w, h, start === 'rock' ? 'solid' : start, edFloorId(draft));
+  f.name = 'Level ' + (draft.floors.length + 1);
+  var i = at == null ? draft.floors.length : Math.max(0, Math.min(draft.floors.length, at));
+  draft.floors.splice(i, 0, f);
+  return i;
+}
+function edRemoveFloor(draft, i) {
+  if (draft.floors.length <= 1 || i < 0 || i >= draft.floors.length) return false;
+  draft.floors.splice(i, 1);
+  return true;
+}
+function edMoveFloor(draft, i, by) {
+  var j = i + by;
+  if (i < 0 || j < 0 || i >= draft.floors.length || j >= draft.floors.length) return false;
+  var f = draft.floors.splice(i, 1)[0]; draft.floors.splice(j, 0, f);
+  return true;
+}
+function edStairs(f, type) {
+  return Object.keys(f.features).filter(function (k) { return f.features[k].type === type; })
+    .map(function (k) { var p = k.split(',').map(Number); return { k: k, x: p[0], y: p[1] }; })
+    .sort(function (a, b) { return a.y - b.y || a.x - b.x; });
+}
+/* Give every staircase its partner (on a copy of the floors, for the pack).
+   Returns the stairs that found none. */
+function edLinkStairs(floors) {
+  var lonely = [];
+  floors.forEach(function (f) { Object.keys(f.features).forEach(function (k) {
+    var t = f.features[k].type; if (t === 'stairsDown' || t === 'stairsUp') { delete f.features[k].to; delete f.features[k].at; }
+  }); });
+  floors.forEach(function (f, i) {
+    var downs = edStairs(f, 'stairsDown'), below = floors[i + 1], ups = below ? edStairs(below, 'stairsUp') : [];
+    downs.forEach(function (d, n) {
+      var u = ups[n];
+      if (!u) { lonely.push({ floor: f.id, i: i, at: [d.x, d.y], type: 'stairsDown' }); return; }
+      f.features[d.k].to = below.id; f.features[d.k].at = [u.x, u.y];
+      below.features[u.k].to = f.id; below.features[u.k].at = [d.x, d.y];
+    });
+    ups.slice(downs.length).forEach(function (u) { lonely.push({ floor: below.id, i: i + 1, at: [u.x, u.y], type: 'stairsUp' }); });
+    if (i === 0) edStairs(f, 'stairsUp').forEach(function (u) { lonely.push({ floor: f.id, i: 0, at: [u.x, u.y], type: 'stairsUp', top: true }); });
+  });
+  return lonely;
+}
+/* Stairs placed: the other end goes on the same square of the next floor, if
+   that square is open and free, so the staircase runs straight up and down. */
+function edPairStairs(draft, i, x, y, type) {
+  var j = type === 'stairsDown' ? i + 1 : i - 1, g = draft.floors[j];
+  if (!g || edRock(g, x, y) || g.features[edKey(x, y)]) return false;
+  g.features[edKey(x, y)] = { type: type === 'stairsDown' ? 'stairsUp' : 'stairsDown' };
+  return true;
+}
+
+/* Carving on a floor under stairs down that have no partner yet: the stairs
+   up appear on the square below them, so a room dug out under a staircase
+   catches it. Returns how many were placed. */
+function edCatchStairs(draft, i) {
+  var f = draft.floors[i], above = draft.floors[i - 1], n = 0;
+  if (!f || !above) return 0;
+  var copy = JSON.parse(JSON.stringify(draft.floors)), lonely = edLinkStairs(copy);
+  lonely.forEach(function (l) {
+    if (l.type !== 'stairsDown' || l.i !== i - 1) return;
+    var x = l.at[0], y = l.at[1];
+    if (edRock(f, x, y) || f.features[edKey(x, y)]) return;
+    f.features[edKey(x, y)] = { type: 'stairsUp' }; n++;
+  });
+  return n;
+}
+
+/* ---- the cover: what the adventure is, how it is won, what Simz sells ---- */
+var ED_WINS = {
+  staff: { flag: 'gotStaff',    label: 'Find the staff',     text: 'The staff is yours. The gate can be closed.' },
+  boss:  { flag: 'beatBoss',    label: 'Beat the boss',      text: 'It is over. Nothing down here will rise again.' },
+  exit:  { flag: 'reachedExit', label: 'Find the way out',   text: 'Daylight, at last. You made it out.' }
+};
+function edCover(draft) {
+  var c = draft.cover || {};
+  return { blurb: c.blurb || '', gold: c.gold == null ? 120 : Math.max(0, Math.min(5000, c.gold | 0)),
+           win: ED_WINS[c.win] ? c.win : 'staff', winText: c.winText || '', shop: Array.isArray(c.shop) ? c.shop.slice() : null };
+}
+function edCountThings(draft, test) {
+  var n = 0;
+  draft.floors.forEach(function (f) { Object.keys(f.features).forEach(function (k) { if (test(f.features[k])) n++; }); });
+  return n;
+}
+/* Problems the game's checks do not know about: the win condition with
+   nothing to win by, and stairs with no partner. */
+function edDraftProblems(draft) {
+  var out = [], c = edCover(draft);
+  var need = { staff: function (ft) { return ft.type === 'staff'; },
+               boss: function (ft) { return ft.type === 'monster' && ft.boss; },
+               exit: function (ft) { return ft.type === 'exit'; } }[c.win];
+  if (!edCountThings(draft, need))
+    out.push({ level: 'error', text: 'It is won by \u201c' + ED_WINS[c.win].label.toLowerCase() + '\u201d, but there is ' +
+              { staff: 'no staff placed', boss: 'no monster marked as the boss', exit: 'no way out placed' }[c.win] + '. Place one, or change how it is won on the cover.', at: null });
+  var copy = JSON.parse(JSON.stringify(draft.floors));
+  edLinkStairs(copy).forEach(function (l) {
+    out.push({ level: 'error', floor: l.floor, at: l.at, text: 'Floor ' + (l.i + 1) + ' at ' + l.at.join(',') + ': ' +
+      (l.top ? 'stairs up from the first floor lead nowhere (the party arrives at the start).'
+             : l.type === 'stairsDown' ? 'stairs down with no stairs up on floor ' + (l.i + 2) + ' to arrive at.'
+             : 'stairs up with no stairs down on floor ' + l.i + ' to lead to.') });
+  });
+  return out;
+}
+
 /* Every wall in step with its neighbour's? (True for anything these edits make.) */
 function edWallsInStep(f) {
   for (var y = 0; y < f.h; y++) for (var x = 0; x < f.w; x++) for (var d = 0; d < 4; d++) {
@@ -148,15 +265,31 @@ function edPackFrom(draft, base) {
     if (draft.zone && !c.zone) c.zone = draft.zone;
     return c;
   });
-  var staff = pk.floors.some(function (f) { return Object.keys(f.features).some(function (k) { return f.features[k].type === 'staff'; }); });
-  if (!staff && pk.rules) delete pk.rules.victory;      // a way out is the goal instead
+  edLinkStairs(pk.floors);
+  // below the first floor the party arrives by the stairs: that is the floor's entry
+  pk.floors.forEach(function (f, i) {
+    if (!i) return;
+    var up = edStairs(f, 'stairsUp')[0];
+    if (up) f.entry = [up.x, up.y];
+  });
+  var c = edCover(draft), win = ED_WINS[c.win];
+  pk.blurb = c.blurb;
+  pk.rules.startingGold = c.gold;
+  pk.rules.victory = { flag: win.flag, text: c.winText || win.text };
+  // the solver must be able to reach whatever wins it
+  pk.floors.forEach(function (f) { Object.keys(f.features).forEach(function (k) {
+    var ft = f.features[k];
+    if (c.win === 'boss' && ft.type === 'monster' && ft.boss) ft.quest = true;
+  }); });
+  if (c.shop) pk.shopStock = c.shop.filter(function (id) { return pk.items[id]; });
   pk.testParties = base.testParties || [];
   return pk;
 }
 
 /* The game's own checks, as a list of problems with the square they are on. */
-function edProblems(pack, validate, solve) {
+function edProblems(pack, validate, solve, draft) {
   var out = [], seen = {};
+  if (draft) edDraftProblems(draft).forEach(function (p) { seen[p.text] = 1; out.push(p); });
   var add = function (text, level) {
     if (seen[text]) return; seen[text] = 1;
     var m = /(?:^|\s)(\d+),(\d+)(?:\D|$)/.exec(text), fm = /\b(w\d+)\b/.exec(text);
@@ -190,7 +323,7 @@ function edNewDraft(size, start) {
 (function () {
   if (typeof document === 'undefined') return;
 
-  var WS = { draft: null, hist: edHistory(), tool: 'carve', thing: 'monster', terrain: 'water',
+  var WS = { draft: null, hist: edHistory(), tool: 'carve', thing: 'monster', terrain: 'water', fi: 0,
              sel: null, drag: null, zoom: 0, problems: [], timer: 0 };
   var DRAFT_KEY = function () { return (typeof MSDD_NS !== 'undefined' ? MSDD_NS : '') + 'msdd_workshop'; };
 
@@ -207,7 +340,7 @@ function edNewDraft(size, start) {
 
   function el(id) { return document.getElementById(id); }
   function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-  function F() { return WS.draft.floors[0]; }
+  function F() { if (WS.fi >= WS.draft.floors.length) WS.fi = WS.draft.floors.length - 1; return WS.draft.floors[WS.fi]; }
 
   /* ---- markup and style ---- */
   var css = document.createElement('style');
@@ -240,6 +373,21 @@ function edNewDraft(size, start) {
     '#wsProblems li.warning{color:var(--text-dim)}',
     '#wsProblems li.okay{border-color:#3f5a32;color:#b9d8a6;cursor:default}',
     '#wsStatus{font-size:11px;color:var(--text-dim);min-height:15px}',
+    '#wsFloors{display:flex;gap:4px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--line)}',
+    '#wsFloors button{height:28px;min-height:0;font-size:11px;padding:0 9px}',
+    '#wsFloors button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold);background:rgba(201,162,74,.09)}',
+    '#wsFloors input{height:28px;width:150px;background:rgba(255,255,255,.03);color:var(--text);border:1px solid var(--line);font-size:12px;padding:0 7px}',
+    '#wsFloors .sep{flex:1}',
+    '#wsCover{position:fixed;inset:0;z-index:46;background:rgba(0,0,0,.72);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 10px}',
+    '#wsCover.on{display:flex}',
+    '#wsCover .box{background:var(--ink);border:1px solid var(--gold);padding:16px;max-width:560px;width:100%}',
+    '#wsCover h3{color:var(--gold);font-size:13px;margin:0 0 10px}',
+    '#wsCover label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-dim);margin:0 0 10px}',
+    '#wsCover input,#wsCover textarea,#wsCover select{background:rgba(255,255,255,.03);color:var(--text);border:1px solid var(--line);font-size:13px;padding:6px 8px;font-family:inherit}',
+    '#wsCover textarea{min-height:56px;resize:vertical}',
+    '#wsShop{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 10px;max-height:220px;overflow:auto;border:1px solid var(--line);padding:6px 8px}',
+    '#wsShop label{flex-direction:row;align-items:center;gap:6px;margin:0;color:var(--text);font-size:11.5px}',
+    '#wsCover .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}',
     '#wsTest{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:45;display:none;gap:8px;align-items:center;',
     '  background:var(--ink);border:1px solid var(--gold);padding:5px 6px 5px 12px;font-size:11px;color:var(--gold);box-shadow:0 6px 24px rgba(0,0,0,.6)}',
     '#wsTest.on{display:flex}',
@@ -272,7 +420,10 @@ function edNewDraft(size, start) {
     '<button id="wsImport">Import…</button><input type="file" id="wsFile" accept="application/json,.json" hidden>' +
     '<select id="wsParty" aria-label="Play-test party" style="height:32px;background:var(--ink);color:var(--text);border:1px solid var(--line);font-size:11px"></select>' +
     '<button id="wsPlay" class="go" title="Play it now with a ready-made party">Play-test</button>' +
+    '<button id="wsCoverBtn" title="Name, story, how it is won, what the shop sells">Cover\u2026</button>' +
+    '<button id="wsKeep" title="Keep it in your adventures, to play from the New Game list">Save to my adventures</button>' +
     '<button id="wsClose">Close</button></div>' +
+    '<div id="wsFloors"></div>' +
     '<div id="wsBody"><div id="wsTools"></div>' +
     '<div id="wsGridWrap"><div id="wsZoom"><button id="wsZoomOut" aria-label="Zoom out">−</button>' +
     '<button id="wsZoomIn" aria-label="Zoom in">+</button><button id="wsFit" style="width:auto;padding:0 8px">Fit</button></div>' +
@@ -286,6 +437,19 @@ function edNewDraft(size, start) {
     '<div id="wsSide"><div><h3>Selected</h3><div id="wsInspect"><p style="color:var(--text-dim);margin:0">Use Inspect and tap a thing to change it.</p></div></div>' +
     '<div><h3>Checks</h3><ul id="wsProblems"></ul></div><div id="wsStatus"></div></div></div>';
   document.body.appendChild(root);
+
+  var cover = document.createElement('div');
+  cover.id = 'wsCover';
+  cover.innerHTML = '<div class="box" role="dialog" aria-label="The cover"><h3>The cover</h3>' +
+    '<label>Author<input id="wsAuthor" maxlength="40" placeholder="Your name"></label>' +
+    '<label>What it is about (shown in the New Game list)<textarea id="wsBlurb" maxlength="200"></textarea></label>' +
+    '<label>How it is won<select id="wsWin"></select></label>' +
+    '<label>What the party reads when they win<textarea id="wsWinText" maxlength="200"></textarea></label>' +
+    '<label>Starting gold<input id="wsGold" type="number" min="0" max="5000" step="10" inputmode="numeric"></label>' +
+    '<label>What Simz sells in town <span><button type="button" id="wsShopAll" style="height:24px;min-height:0;font-size:10px;padding:0 8px">All</button> <button type="button" id="wsShopNone" style="height:24px;min-height:0;font-size:10px;padding:0 8px">None</button> <button type="button" id="wsShopStd" style="height:24px;min-height:0;font-size:10px;padding:0 8px">As Ashkeld</button></span></label>' +
+    '<div id="wsShop"></div>' +
+    '<div class="acts"><button id="wsCoverCancel">Cancel</button><button id="wsCoverOk" class="go">Done</button></div></div>';
+  document.body.appendChild(cover);
 
   var bar = document.createElement('div');
   bar.id = 'wsTest';
@@ -317,6 +481,43 @@ function edNewDraft(size, start) {
     }
   }
 
+  /* ---- the floors ---- */
+  function renderFloors() {
+    var h = el('wsFloors'); h.innerHTML = '';
+    var lab = document.createElement('span'); lab.textContent = 'Floors'; lab.style.cssText = 'font:10px ui-monospace,Menlo,monospace;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-right:4px';
+    h.appendChild(lab);
+    WS.draft.floors.forEach(function (f, i) {
+      var b = document.createElement('button'); b.textContent = String(i + 1); b.title = f.name;
+      b.setAttribute('aria-pressed', i === WS.fi ? 'true' : 'false');
+      b.addEventListener('click', function () { WS.fi = i; WS.sel = null; renderFloors(); inspect(); draw(); });
+      h.appendChild(b);
+    });
+    var add = document.createElement('button'); add.textContent = '+ Floor'; add.title = 'Add a floor below the last';
+    add.addEventListener('click', function () {
+      var cur = F();
+      change(function () { WS.fi = edAddFloor(WS.draft, cur.w, cur.h, 'rock'); return true; });
+      renderFloors(); inspect(); draw(); status('Floor ' + (WS.fi + 1) + ' added below. Stairs down on floor ' + WS.fi + ' put stairs up on the same square here.');
+    });
+    h.appendChild(add);
+    var nm = document.createElement('input'); nm.value = F().name || ''; nm.maxLength = 40; nm.setAttribute('aria-label', 'Floor name');
+    nm.addEventListener('change', function () { var v = nm.value.trim() || 'Level ' + (WS.fi + 1); change(function () { F().name = v; return true; }); });
+    h.appendChild(nm);
+    var sp = document.createElement('span'); sp.className = 'sep'; h.appendChild(sp);
+    [['\u2191', 'Move this floor up', -1], ['\u2193', 'Move this floor down', 1]].forEach(function (m) {
+      var b = document.createElement('button'); b.textContent = m[0]; b.title = m[1];
+      b.disabled = WS.fi + m[2] < 0 || WS.fi + m[2] >= WS.draft.floors.length;
+      b.addEventListener('click', function () { var j = WS.fi + m[2]; if (change(function () { return edMoveFloor(WS.draft, WS.fi, m[2]); })) WS.fi = j; renderFloors(); draw(); });
+      h.appendChild(b);
+    });
+    var del = document.createElement('button'); del.textContent = 'Remove floor'; del.disabled = WS.draft.floors.length <= 1;
+    del.addEventListener('click', function () {
+      change(function () { return edRemoveFloor(WS.draft, WS.fi); });
+      WS.fi = Math.max(0, WS.fi - 1); WS.sel = null; renderFloors(); inspect(); draw();
+      status('Floor removed. Undo brings it back.');
+    });
+    h.appendChild(del);
+  }
+
   /* ---- drawing ---- */
   var TERR_COL = { water: '#2c5a78', embers: '#8a3a18', fog: '#5a5a64', antimagic: '#4a2a6a', holy: '#8a7a3a', rubble: '#5a4a3a',
                    web: '#7a7a7a', chasm: '#000000', bridge: '#6a4a2a', ice: '#7aa8c8', rotten: '#4a3a1a', pillars: '#6a6258' };
@@ -333,11 +534,13 @@ function edNewDraft(size, start) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = '#16120e'; g.fillRect(0, 0, f.w * s, f.h * s);
     var bad = {};
-    WS.problems.forEach(function (p) { if (p.level === 'error' && p.at) bad[edKey(p.at[0], p.at[1])] = 1; });
+    WS.problems.forEach(function (p) { if (p.level === 'error' && p.at && (!p.floor || p.floor === f.id)) bad[edKey(p.at[0], p.at[1])] = 1; });
     for (var y = 0; y < f.h; y++) for (var x = 0; x < f.w; x++) {
       var px = x * s, py = y * s, k = edKey(x, y);
       if (edRock(f, x, y)) {
         g.fillStyle = '#100d0a'; g.fillRect(px, py, s, s);
+        var up = WS.fi > 0 ? WS.draft.floors[WS.fi - 1] : null;      // the floor above, faintly, to line things up
+        if (up && edIn(up, x, y) && !edRock(up, x, y)) { g.fillStyle = 'rgba(120,150,200,.10)'; g.fillRect(px, py, s, s); }
         g.strokeStyle = 'rgba(255,255,255,.035)'; g.strokeRect(px + .5, py + .5, s - 1, s - 1);
         continue;
       }
@@ -366,10 +569,12 @@ function edNewDraft(size, start) {
       if (edWall(f, x, y, 3)) { g.moveTo(px, py); g.lineTo(px, py + s); }
     }
     g.stroke(); g.lineWidth = 1;
-    // the entry, as an arrow
+    // the entry, as an arrow (the first floor only)
+    if (WS.fi === 0) {
     var ex = f.entry[0] * s + s / 2, ey = f.entry[1] * s + s / 2, a = [-Math.PI / 2, 0, Math.PI / 2, Math.PI][f.entryFacing];
     g.save(); g.translate(ex, ey); g.rotate(a); g.fillStyle = '#7fd08a';
     g.beginPath(); g.moveTo(s * .34, 0); g.lineTo(-s * .22, -s * .24); g.lineTo(-s * .22, s * .24); g.closePath(); g.fill(); g.restore();
+    }
     // a drag in progress
     if (WS.drag && (WS.tool === 'carve' || WS.tool === 'rock')) {
       var d = WS.drag, x0 = Math.min(d.x0, d.x1), y0 = Math.min(d.y0, d.y1), x1 = Math.max(d.x0, d.x1), y1 = Math.max(d.y0, d.y1);
@@ -401,17 +606,21 @@ function edNewDraft(size, start) {
   function packNow() { return edPackFrom(WS.draft, BUNDLED_BASE || BUNDLED_PACK); }
   function runChecks() {
     var pk = packNow();
-    try { WS.problems = edProblems(pk, validatePack, proveSolvable); }
+    try { WS.problems = edProblems(pk, validatePack, proveSolvable, WS.draft); }
     catch (e) { WS.problems = [{ text: 'The check failed: ' + e.message, level: 'error', at: null }]; }
     var ul = el('wsProblems'); ul.innerHTML = '';
     var errs = WS.problems.filter(function (p) { return p.level === 'error'; }).length;
     if (!WS.problems.length) { ul.innerHTML = '<li class="okay">All clear: it can be played from start to goal.</li>'; }
     WS.problems.forEach(function (p) {
       var li = document.createElement('li'); li.className = p.level; li.textContent = p.text;
-      if (p.at) { li.title = 'Show the square'; li.addEventListener('click', function () { WS.sel = p.at; draw(); inspect(); }); }
+      if (p.at) { li.title = 'Show the square'; li.addEventListener('click', function () {
+        var fi = p.floor ? WS.draft.floors.map(function (f) { return f.id; }).indexOf(p.floor) : -1;
+        if (fi >= 0) WS.fi = fi;
+        WS.sel = p.at; renderFloors(); draw(); inspect(); }); }
       ul.appendChild(li);
     });
     el('wsPlay').disabled = errs > 0;
+    el('wsKeep').disabled = errs > 0;
     el('wsPlay').title = errs ? 'Clear the problems first' : 'Play it now with a ready-made party';
     draw();
   }
@@ -438,7 +647,17 @@ function edNewDraft(size, start) {
       change(function () { return edSetWall(f, c.x, c.y, d, !edWall(f, c.x, c.y, d)); });
     } else if (WS.tool === 'thing') {
       var th = edThing(WS.thing);
-      if (th && change(function () { return edPlace(f, c.x, c.y, th.make()); })) { WS.sel = [c.x, c.y]; inspect(); draw(); }
+      var paired = false;
+      if (th && change(function () {
+        var ok = edPlace(f, c.x, c.y, th.make());
+        if (ok && (th.id === 'stairsDown' || th.id === 'stairsUp')) paired = edPairStairs(WS.draft, WS.fi, c.x, c.y, th.id);
+        return ok;
+      })) {
+        WS.sel = [c.x, c.y]; inspect(); draw();
+        if (paired) status('And ' + (th.id === 'stairsDown' ? 'stairs up on floor ' + (WS.fi + 2) : 'stairs down on floor ' + WS.fi) + ', on the same square.');
+      }
+    } else if (WS.tool === 'entry' && WS.fi > 0) {
+      status('Only the first floor has a start. Deeper floors begin where their stairs up arrive.');
     } else if (WS.tool === 'entry') {
       var same = f.entry[0] === c.x && f.entry[1] === c.y;
       change(function () { return edSetEntry(f, c.x, c.y, same ? f.entryFacing + 1 : f.entryFacing); });
@@ -464,7 +683,9 @@ function edNewDraft(size, start) {
   function endDrag() {
     var d = WS.drag; WS.drag = null;
     if (!d) return;
-    if (WS.tool === 'carve') change(function () { return edCarve(F(), d.x0, d.y0, d.x1, d.y1); });
+    var caught = 0;
+    if (WS.tool === 'carve') change(function () { var ok = edCarve(F(), d.x0, d.y0, d.x1, d.y1); caught = edCatchStairs(WS.draft, WS.fi); return ok; });
+    if (caught) status('The stairs from floor ' + WS.fi + ' come down into it' + (caught > 1 ? ' (' + caught + ' staircases).' : '.'));
     else if (WS.tool === 'rock') change(function () { return edFill(F(), d.x0, d.y0, d.x1, d.y1); });
     draw();
   }
@@ -486,6 +707,15 @@ function edNewDraft(size, start) {
     var I = typeof ITEMS !== 'undefined' ? ITEMS : (BUNDLED_BASE || {}).items || {};
     if (ft.type === 'monster') html += '<label>Who<select data-k="ref">' + opts(Object.keys(M).sort(function (a, b) { return (M[a].level - M[b].level) || M[a].name.localeCompare(M[b].name); })
       .map(function (id) { return [id, M[id].name + ' (level ' + M[id].level + ((M[id].traits || []).indexOf('boss') >= 0 ? ', boss' : '') + ')']; }), ft.ref) + '</select></label>';
+    if (ft.type === 'monster')
+      html += '<label><span><input type="checkbox" data-k="boss"' + (ft.boss ? ' checked' : '') + '> The boss' +
+              (edCover(WS.draft).win === 'boss' ? ' (beating it wins)' : '') + '</span></label>';
+    if (ft.type === 'stairsDown' || ft.type === 'stairsUp') {
+      var lk = JSON.parse(JSON.stringify(WS.draft.floors)); edLinkStairs(lk);
+      var me = lk[WS.fi].features[k], to = me && me.to ? lk.map(function (q) { return q.id; }).indexOf(me.to) : -1;
+      html += '<p style="margin:0 0 8px">' + (to >= 0 ? 'Leads to floor ' + (to + 1) + ', square ' + me.at.join(',') + '.'
+              : '<span style="color:#f0b8a8">Not linked yet: ' + (ft.type === 'stairsDown' ? 'put stairs up on the floor below.' : 'put stairs down on the floor above.') + '</span>') + '</p>';
+    }
     if (ft.type === 'door') {
       html += '<label><span><input type="checkbox" data-k="locked"' + (ft.locked ? ' checked' : '') + '> Locked</span></label>';
       if (ft.locked) html += '<label>Key<select data-k="keyId">' + opts(ED_KEYS.map(function (id) { return [id, (I[id] || {}).name || id]; }), ft.keyId) + '</select></label>';
@@ -506,6 +736,7 @@ function edNewDraft(size, start) {
         var key = inp.dataset.k;
         change(function () {
           var cur = F().features[k]; if (!cur) return false;
+          if (inp.type === 'checkbox' && key === 'boss') { if (inp.checked) cur.boss = true; else delete cur.boss; return true; }
           if (inp.type === 'checkbox') { cur[key] = inp.checked; if (key === 'locked' && inp.checked && !cur.keyId) cur.keyId = ED_KEYS[0]; if (key === 'locked' && !inp.checked) delete cur.keyId; }
           else if (inp.value === '') delete cur[key];
           else cur[key] = inp.value;
@@ -548,7 +779,8 @@ function edNewDraft(size, start) {
       }
     }
     if (!f) f = edNewFloor(NEW.size, NEW.size, NEW.start === 'box' ? 'box' : 'rock', 'w1');
-    change(function () { WS.draft.floors[0] = f; return true; });
+    f.id = F().id; f.name = F().name;
+    change(function () { WS.draft.floors[WS.fi] = f; return true; });
     WS.sel = null; inspect();
   }
 
@@ -565,6 +797,10 @@ function edNewDraft(size, start) {
     root.classList.remove('on');
     ['chooser', 'roster', 'menu', 'town'].forEach(function (id) { var e = el(id); if (e) e.classList.remove('on'); });
     if (spec && typeof startTestParty === 'function') startTestParty(spec);
+    if (WS.fi > 0 && typeof changeFloor === 'function') {     // test the floor you are on: arrive at its entry
+      var cf = PACK.floors[WS.fi];
+      changeFloor({ floor: cf.id, at: cf.entry }, cf.entryFacing || 1);
+    }
     bar.classList.add('on');
   }
   function leaveTest() {
@@ -595,16 +831,62 @@ function edNewDraft(size, start) {
       try {
         var pk = JSON.parse(rd.result);
         if (!pk.floors || !pk.floors[0] || !pk.floors[0].cells) throw new Error('No floor in it');
-        var f = JSON.parse(JSON.stringify(pk.floors[0])); f.id = 'w1'; f.terrain = f.terrain || {}; f.features = f.features || {};
-        change(function () { WS.draft.floors = [f]; WS.draft.name = pk.name || WS.draft.name; return true; });
-        el('wsName').value = WS.draft.name;
-        status('Imported the first floor of “' + (pk.name || 'that pack') + '”.' + (pk.floors.length > 1 ? ' Several floors arrive in a later Workshop.' : ''));
+        var fl = pk.floors.map(function (q, i) { var f = JSON.parse(JSON.stringify(q)); f.id = 'w' + (i + 1); f.terrain = f.terrain || {}; f.features = f.features || {};
+          Object.keys(f.features).forEach(function (k) { delete f.features[k].to; delete f.features[k].at; }); return f; });
+        change(function () {
+          WS.draft.floors = fl; WS.draft.name = pk.name || WS.draft.name; WS.draft.author = pk.author || WS.draft.author;
+          var win = Object.keys(ED_WINS).filter(function (k) { return pk.rules && pk.rules.victory && ED_WINS[k].flag === pk.rules.victory.flag; })[0];
+          WS.draft.cover = { blurb: pk.blurb || '', gold: (pk.rules || {}).startingGold, win: win || 'staff', winText: ((pk.rules || {}).victory || {}).text || '', shop: pk.shopStock || null };
+          return true;
+        });
+        WS.fi = 0; el('wsName').value = WS.draft.name; renderFloors();
+        status('Imported \u201c' + (pk.name || 'that pack') + '\u201d: ' + fl.length + (fl.length === 1 ? ' floor.' : ' floors.') + ' Stairs pair up again in reading order; check them.');
       } catch (e) { status('That file is not a pack: ' + e.message); }
     };
     rd.readAsText(file);
   }
 
   function status(t) { el('wsStatus').textContent = t || ''; }
+
+  /* ---- the cover ---- */
+  function openCover() {
+    var c = edCover(WS.draft), I = BUNDLED_BASE.items, std = BUNDLED_BASE.shopStock || [];
+    el('wsAuthor').value = WS.draft.author || '';
+    el('wsBlurb').value = c.blurb;
+    el('wsWin').innerHTML = Object.keys(ED_WINS).map(function (k) { return '<option value="' + k + '"' + (k === c.win ? ' selected' : '') + '>' + ED_WINS[k].label + '</option>'; }).join('');
+    el('wsWinText').value = c.winText; el('wsWinText').placeholder = ED_WINS[c.win].text;
+    el('wsGold').value = c.gold;
+    var stock = c.shop || std, sell = Object.keys(I).filter(function (id) { return I[id].value > 0 && !(I[id].flags || []).length && !I[id].cursed; })
+      .sort(function (a, b) { return (I[a].slot || '').localeCompare(I[b].slot || '') || I[a].value - I[b].value; });
+    el('wsShop').innerHTML = sell.map(function (id) { return '<label><input type="checkbox" value="' + escH(id) + '"' + (stock.indexOf(id) >= 0 ? ' checked' : '') + '> ' + escH(I[id].name) + '</label>'; }).join('');
+    cover.classList.add('on');
+  }
+  el('wsWin').addEventListener('change', function () { el('wsWinText').placeholder = ED_WINS[el('wsWin').value].text; });
+  var shopSet = function (fn) { el('wsShop').querySelectorAll('input').forEach(function (i) { i.checked = fn(i.value); }); };
+  el('wsShopAll').addEventListener('click', function () { shopSet(function () { return true; }); });
+  el('wsShopNone').addEventListener('click', function () { shopSet(function () { return false; }); });
+  el('wsShopStd').addEventListener('click', function () { var std = BUNDLED_BASE.shopStock || []; shopSet(function (v) { return std.indexOf(v) >= 0; }); });
+  el('wsCoverCancel').addEventListener('click', function () { cover.classList.remove('on'); });
+  el('wsCoverOk').addEventListener('click', function () {
+    var shop = Array.prototype.filter.call(el('wsShop').querySelectorAll('input'), function (i) { return i.checked; }).map(function (i) { return i.value; });
+    change(function () {
+      WS.draft.author = el('wsAuthor').value.trim();
+      WS.draft.cover = { blurb: el('wsBlurb').value.trim(), win: el('wsWin').value, winText: el('wsWinText').value.trim(),
+                         gold: Math.max(0, Math.min(5000, parseInt(el('wsGold').value, 10) || 0)), shop: shop };
+      return true;
+    });
+    cover.classList.remove('on'); inspect();
+  });
+
+  /* ---- keeping it ---- */
+  function keep() {
+    var pk = packNow();
+    var errs = edProblems(pk, validatePack, proveSolvable, WS.draft).filter(function (p) { return p.level === 'error'; });
+    if (errs.length) { status('Clear the problems first.'); return; }
+    if (typeof mineSave !== 'function' || !mineSave(pk)) { status('It could not be kept: the device may be out of room. Export it instead.'); return; }
+    status('Kept. \u201c' + pk.name + '\u201d is in the New Game list now. Saving again replaces it.');
+    if (typeof renderChooser === 'function') { try { renderChooser(); } catch (e) {} }
+  }
 
   /* ---- open and close ---- */
   function fillParties() {
@@ -617,14 +899,16 @@ function edNewDraft(size, start) {
     fillParties();
     el('wsName').value = WS.draft.name || '';
     root.classList.add('on');
-    renderTools(); inspect();
+    renderTools(); renderFloors(); inspect();
     requestAnimationFrame(function () { draw(); runChecks(); });
   }
   function close() { root.classList.remove('on'); }
 
   el('wsClose').addEventListener('click', close);
-  el('wsUndo').addEventListener('click', function () { var d = edUndo(WS.hist, WS.draft); if (d) { WS.draft = d; afterChange(); inspect(); } });
-  el('wsRedo').addEventListener('click', function () { var d = edRedo(WS.hist, WS.draft); if (d) { WS.draft = d; afterChange(); inspect(); } });
+  el('wsCoverBtn').addEventListener('click', openCover);
+  el('wsKeep').addEventListener('click', keep);
+  el('wsUndo').addEventListener('click', function () { var d = edUndo(WS.hist, WS.draft); if (d) { WS.draft = d; afterChange(); renderFloors(); inspect(); } });
+  el('wsRedo').addEventListener('click', function () { var d = edRedo(WS.hist, WS.draft); if (d) { WS.draft = d; afterChange(); renderFloors(); inspect(); } });
   el('wsName').addEventListener('change', function () {
     var v = el('wsName').value.trim() || 'My adventure';
     change(function () { WS.draft.name = v; WS.draft.slug = v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-adventure'; return true; });
@@ -650,5 +934,6 @@ function edNewDraft(size, start) {
     e.stopPropagation();
   }, true);
 
-  window.MSDDWorkshop = { open: open, close: close, state: WS, draw: draw, runChecks: runChecks, packNow: packNow, leaveTest: leaveTest };
+  window.MSDDWorkshop = { open: open, close: close, state: WS, draw: draw, runChecks: runChecks, packNow: packNow, leaveTest: leaveTest,
+                         keep: keep, openCover: openCover, renderFloors: renderFloors };
 })();

@@ -15,7 +15,8 @@ const BOOT = grab(src, 'BUNDLED PACK') + grab(src, 'PACK CORE') +
   '\nvar BUNDLED_BASE = JSON.parse(JSON.stringify(BUNDLED_PACK));\nvar __L = loadPack(BUNDLED_PACK);\n';
 const names = ['edNewFloor', 'edCarve', 'edFill', 'edSetWall', 'edWall', 'edRock', 'edPaint', 'edPlace', 'edSetEntry',
   'edWallsInStep', 'edPackFrom', 'edProblems', 'edHistory', 'edRecord', 'edUndo', 'edRedo', 'edNewDraft', 'edThing',
-  'ED_THINGS', 'ED_TERRAIN', 'ED_SIZES', 'validatePack', 'proveSolvable', 'loadPack', 'BUNDLED_BASE'];
+  'ED_THINGS', 'ED_TERRAIN', 'ED_SIZES', 'edAddFloor', 'edRemoveFloor', 'edMoveFloor', 'edLinkStairs', 'edPairStairs',
+  'edCover', 'edDraftProblems', 'edCatchStairs', 'ED_WINS', 'validatePack', 'proveSolvable', 'loadPack', 'BUNDLED_BASE'];
 const T = new Function(BOOT + grab(wsrc, 'EDITOR CORE') + '\nreturn {' + names.join(',') + '};')();
 
 let pass = 0, fail = 0;
@@ -109,8 +110,8 @@ ok('with the base\'s monsters, items and town', Object.keys(pk.monsters).length 
 ok('the draft\'s floor, numbered, with its zone', pk.floors.length === 1 && pk.floors[0].depth === 1 && pk.floors[0].zone === 'crypt');
 ok('it loads into the game', T.loadPack(JSON.parse(JSON.stringify(pk))).ok);
 ok('it does not change the draft', f.depth === 1 && !f.zone);
-let pk2 = T.edPackFrom({ name: 'Out', floors: [ex], rev: 1 }, T.BUNDLED_BASE);
-ok('with a way out and no staff, no staff victory is asked for', !pk2.rules.victory);
+let pk2 = T.edPackFrom({ name: 'Out', floors: [ex], rev: 1, cover: { win: 'exit' } }, T.BUNDLED_BASE);
+ok('won by the way out, the pack asks for that', pk2.rules.victory.flag === 'reachedExit');
 ok('a round trip through JSON keeps the floor the same', JSON.stringify(JSON.parse(JSON.stringify(pk)).floors[0].cells) === JSON.stringify(f.cells));
 ok('the base is left alone', T.BUNDLED_BASE.id === 'msdd.core.tapro' && T.BUNDLED_BASE.floors.length === 3);
 
@@ -129,6 +130,71 @@ ok('nothing more to undo', T.edUndo(h, d) === null);
 for (let k = 0; k < 9; k++) T.edRecord(h, d);
 ok('history keeps its limit', h.past.length === 5);
 
+console.log('\n[W8] several floors, and stairs that find each other (v7.1)');
+{
+  const d = T.edNewDraft(12, 'box');
+  const i = T.edAddFloor(d, 12, 12, 'box');
+  ok('a floor added below', i === 1 && d.floors.length === 2 && d.floors[1].id === 'w2' && d.floors[1].name === 'Level 2');
+  T.edPlace(d.floors[0], 6, 6, { type: 'stairsDown' });
+  ok('stairs down put stairs up on the same square of the floor below', T.edPairStairs(d, 0, 6, 6, 'stairsDown') && d.floors[1].features['6,6'].type === 'stairsUp');
+  ok('not over something already there', (() => { T.edPlace(d.floors[1], 3, 3, { type: 'chest' }); T.edPlace(d.floors[0], 3, 3, { type: 'stairsDown' }); return !T.edPairStairs(d, 0, 3, 3, 'stairsDown'); })());
+  T.edPlace(d.floors[0], 3, 3, null);
+  const copy = JSON.parse(JSON.stringify(d.floors)), lonely = T.edLinkStairs(copy);
+  ok('linked both ways', copy[0].features['6,6'].to === 'w2' && copy[0].features['6,6'].at.join() === '6,6' &&
+     copy[1].features['6,6'].to === 'w1' && copy[1].features['6,6'].at.join() === '6,6' && !lonely.length, JSON.stringify(lonely));
+  ok('the draft itself is not written to', !d.floors[0].features['6,6'].to);
+  T.edPlace(d.floors[1], 9, 9, { type: 'stairsDown' });
+  let probs = T.edDraftProblems(d);
+  ok('stairs down from the last floor lead nowhere: an error on its square', probs.some(p => p.floor === 'w2' && p.at.join() === '9,9' && /no stairs up on floor 3/.test(p.text)));
+  T.edAddFloor(d, 12, 12, 'box'); T.edPairStairs(d, 1, 9, 9, 'stairsDown');
+  T.edPlace(d.floors[1], 2, 2, T.edThing('staff').make());
+  probs = T.edDraftProblems(d);
+  ok('a third floor below clears it', !probs.length, JSON.stringify(probs));
+  const pk = T.edPackFrom(d, T.BUNDLED_BASE);
+  const pr = T.edProblems(pk, T.validatePack, T.proveSolvable, d);
+  ok('three floors joined by stairs pass the game\'s own checks', !pr.filter(p => p.level === 'error').length, JSON.stringify(pr));
+  ok('numbered by depth', pk.floors.map(f => f.depth).join() === '1,2,3');
+  ok('a deeper floor begins at its stairs up', pk.floors[1].entry.join() === '6,6' && pk.floors[2].entry.join() === '9,9');
+  T.edPlace(d.floors[0], 1, 1, { type: 'stairsUp' });
+  ok('stairs up on the first floor are a problem', T.edDraftProblems(d).some(p => /first floor lead nowhere/.test(p.text)));
+  T.edPlace(d.floors[0], 1, 1, null);
+  ok('floors move', T.edMoveFloor(d, 2, -1) && d.floors[1].id === 'w3' && !T.edMoveFloor(d, 0, -1));
+  ok('and stairs pair up in their new order: now a problem', T.edDraftProblems(d).length > 0);
+  T.edMoveFloor(d, 1, 1);
+  ok('the last floor cannot be removed', T.edRemoveFloor(d, 2) && T.edRemoveFloor(d, 1) && !T.edRemoveFloor(d, 0) && d.floors.length === 1);
+  {
+    const e = T.edNewDraft(12, 'box');
+    T.edPlace(e.floors[0], 7, 7, { type: 'stairsDown' });
+    T.edAddFloor(e, 12, 12, 'rock');
+    ok('a new floor of rock catches nothing yet', T.edCatchStairs(e, 1) === 0);
+    T.edCarve(e.floors[1], 5, 5, 9, 9);
+    ok('carving a room under the stairs catches them: stairs up below', T.edCatchStairs(e, 1) === 1 && e.floors[1].features['7,7'].type === 'stairsUp');
+    ok('and only once', T.edCatchStairs(e, 1) === 0 && !T.edDraftProblems(e).some(p => /stairs/.test(p.text)));
+  }
+  ok('a new floor takes the first free id', T.edAddFloor(d, 12, 12, 'rock') === 1 && d.floors[1].id === 'w2');
+  ok('and is solid rock: no start room of its own', d.floors[1].cells.every(c => c & 16));
+}
+
+console.log('\n[W9] the cover, and how it is won (v7.1)');
+{
+  const d = T.edNewDraft(12, 'box');
+  T.edPlace(d.floors[0], 8, 8, { type: 'monster', ref: 'mn.goblinChief', boss: true });
+  ok('by default, won by the staff: with none placed, that is an error', T.edDraftProblems(d).some(p => /no staff placed/.test(p.text)));
+  d.cover = { win: 'boss', gold: 300, blurb: 'Goblins in the cellar.', winText: 'The chief is down.', shop: ['it.potion', 'it.torch', 'it.nothing'] };
+  ok('won by the boss, with one marked, it is clear', !T.edDraftProblems(d).length);
+  const pk = T.edPackFrom(d, T.BUNDLED_BASE);
+  ok('the pack is won by beating the boss, with its words', pk.rules.victory.flag === 'beatBoss' && pk.rules.victory.text === 'The chief is down.');
+  ok('the boss must be reachable', pk.floors[0].features['8,8'].quest === true);
+  ok('starting gold and the blurb carry over', pk.rules.startingGold === 300 && pk.blurb === 'Goblins in the cellar.');
+  ok('the shop sells what was ticked, and nothing that does not exist', pk.shopStock.join() === 'it.potion,it.torch');
+  ok('the whole thing passes the game\'s checks', !T.edProblems(pk, T.validatePack, T.proveSolvable, d).filter(p => p.level === 'error').length);
+  T.edSetWall(d.floors[0], 8, 8, 0, true); T.edSetWall(d.floors[0], 8, 8, 1, true); T.edSetWall(d.floors[0], 8, 8, 2, true); T.edSetWall(d.floors[0], 8, 8, 3, true);
+  ok('a boss walled in where nobody can reach it is an error', T.edProblems(T.edPackFrom(d, T.BUNDLED_BASE), T.validatePack, T.proveSolvable, d).some(p => p.level === 'error'));
+  ok('gold is kept within reason', T.edCover({ cover: { gold: 99999 } }).gold === 5000 && T.edCover({ cover: { gold: -5 } }).gold === 0);
+  ok('an unknown way to win falls back to the staff', T.edCover({ cover: { win: 'dance' } }).win === 'staff');
+  ok('every way to win has a flag the game checks', Object.keys(T.ED_WINS).every(k => /^(gotStaff|beatBoss|reachedExit)$/.test(T.ED_WINS[k].flag)));
+}
+
 console.log('\n[W7] the page');
 ok('the game loads the Workshop', /<script src="msdd_workshop\.js"><\/script>/.test(src));
 ok('it is offered on the chooser and in the menu', /opt\('The Workshop'/.test(src) && /id="openWorkshop"/.test(src));
@@ -136,6 +202,10 @@ ok('a play-test saves nothing', /window\.WS_TESTING\) return \{ ok: true/.test(s
 ok('leaving a play-test brings the real game back from its autosave', /loadFrom\('auto'\)/.test(wsrc));
 ok('the draft is kept on the device', /msdd_workshop/.test(wsrc) && /localStorage\.setItem\(DRAFT_KEY\(\)/.test(wsrc));
 ok('it works offline', /'\.\/msdd_workshop\.js'/.test(fs.readFileSync('./sw.js', 'utf8')));
+ok('the game wins by the way out', /questFlags\.reachedExit = true/.test(src));
+ok('and by beating a boss placed on the map', /questFlags\.beatBoss = true/.test(src) && /\{ boss: !!\(feat && feat\.boss\) \}/.test(src));
+ok('kept adventures are listed on the chooser', /var mine = mineAll\(\)/.test(src));
+ok('and a save in one reloads after a refresh', /var mine = typeof mineGet === 'function' \? mineGet\(raw\.packId\)/.test(src));
 
 console.log('\n' + (fail ? 'FAILED' : 'PASSED') + ' \u2014 ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

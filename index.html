@@ -860,7 +860,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v7.0</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v7.1</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -4708,6 +4708,7 @@ function describeWhere(blob) {
   if (blob.generated) return 'Endless Delve' + (m ? ', floor ' + m[1] : '') +
                              (blob.generated.seedText ? ' \u00b7 \u201c' + blob.generated.seedText + '\u201d'
                               : blob.generated.seed != null ? ' \u00b7 seed ' + blob.generated.seed : '');
+  if (blob.packId && typeof mineGet === 'function') { var mk = mineGet(blob.packId); if (mk) return mk.name; }   // v7.1: one of my adventures
   return fid ? 'The Ruined Tower of Ashkeld' : '';
 }
 function describeSave(blob) {
@@ -11585,6 +11586,7 @@ function startCombat(monsterId, group, opts) {
   cst = beginCombat(party, foes, actionRng, combatGround(floor, pos.x, pos.y, clearedHere()),
                     { careful: carefulSteps > 0 });
   cst.wanderer = !!opts.wanderer;                  // v6.1.10: only these calm a delve's floor
+  cst.boss = !!opts.boss;                          // v7.1: a boss placed on the map
   carefulSteps = 0;
   if (ally) {
     cst.ally = { name: ally.name, dice: ally.dice, toHit: ally.toHit };
@@ -11615,6 +11617,11 @@ function endCombat() {
   var beaten = describeFoes(cst.foes);
   beaten = beaten.charAt(0).toUpperCase() + beaten.slice(1);   // a sentence starts with a capital (v4.9)
   if (out === 'won') runNote('kills', kills);
+  // v7.1: an adventure won by beating its boss
+  if (out === 'won' && cst.boss) {
+    questFlags.beatBoss = true;
+    if (RULES.victory && RULES.victory.flag === 'beatBoss') setTimeout(showVictory, 1400);
+  }
   if (out === 'won') say(beaten + ' defeated \u2014 ' + kills +
                          ' down, ' + cst.xpAwarded + ' experience.');
   else if (out === 'fled') say(wentHome ? 'The world reassembles. You are in town.'
@@ -11687,6 +11694,21 @@ function slotKey(id) { return MSDD_NS + 'msdd_save_' + id; }
 function storageAvailable() {
   try { var k = MSDD_NS + '__t'; localStorage.setItem(k, '1'); localStorage.removeItem(k); return true; }
   catch (e) { return false; }
+}
+
+/* v7.1: adventures built in the Workshop and kept on this device. */
+function mineKey() { return MSDD_NS + 'msdd_mine'; }
+function mineAll() {
+  try { var m = JSON.parse(localStorage.getItem(mineKey()) || '{}'); return m && typeof m === 'object' ? m : {}; } catch (e) { return {}; }
+}
+function mineGet(id) { var m = mineAll(); return m[id] || null; }
+function mineSave(pk) {
+  var m = mineAll(); m[pk.id] = pk;
+  try { localStorage.setItem(mineKey(), JSON.stringify(m)); return true; } catch (e) { return false; }
+}
+function mineDelete(id) {
+  var m = mineAll(); delete m[id];
+  try { localStorage.setItem(mineKey(), JSON.stringify(m)); } catch (e) {}
 }
 
 /* v5.5: the record kept across runs, apart from any one save. */
@@ -11794,6 +11816,11 @@ function prepareSavePack(raw, filePack) {
              notes: rb.same ? ['The delve was rebuilt from its seed, ' + raw.generated.seed + '.']
                             : ['This delve was made by an older version of the game and has come out ' +
                                'differently. The party starts again at the stairs of its floor.'] };
+  }
+  var mine = typeof mineGet === 'function' ? mineGet(raw.packId) : null;     // v7.1: one of my adventures
+  if (mine) {
+    l = loadPack(JSON.parse(JSON.stringify(mine)));
+    return l.ok ? { ok: true, notes: [] } : { ok: false, notes: l.errors };
   }
   if (filePack && filePack.id === raw.packId) {
     l = loadPack(filePack);
@@ -12322,6 +12349,20 @@ function renderChooser() {
       'A fresh dungeon, generated and proven solvable before you set foot in it.' +
       (travelling ? ' Take a levelled party in and see how deep it goes.' : ''),
       'generate', function () { promptDelve(); });
+
+  // v7.1: my adventures, made in the Workshop
+  if (typeof mineAll === 'function') {
+    var mine = mineAll();
+    Object.keys(mine).sort(function (a, b) { return (mine[a].name || '').localeCompare(mine[b].name || ''); }).forEach(function (id) {
+      var pk = mine[id];
+      opt(pk.name || 'An adventure', esc((pk.blurb || 'Built in the Workshop.') + ' \u00b7 ' + (pk.floors || []).length +
+          ((pk.floors || []).length === 1 ? ' floor' : ' floors') + (pk.author ? ' \u00b7 by ' + pk.author : '')),
+          'enter', function () {
+            if (applyPack(JSON.parse(JSON.stringify(pk)))) document.getElementById('chooser').classList.remove('on');
+            else chooseNote(document.getElementById('packNotes').innerHTML);
+          });
+    });
+  }
 
   if (typeof window !== 'undefined' && window.MSDDWorkshop) opt('The Workshop',
       'Build a floor of your own: carve rooms, place monsters, doors and treasure, and play-test it as you go.',
@@ -16429,7 +16470,7 @@ function step(dir, sliding) {
     redraw();
     soon(function () {
       startCombat(feat && feat.ref ? feat.ref : pickEncounter(floor, actionRng, encounterHere()),
-                  feat && feat.group);
+                  feat && feat.group, { boss: !!(feat && feat.boss) });
     }, 500);
     return;
   }
@@ -16510,6 +16551,14 @@ function interactHere() {
     say(feat.text + ' ' + receiveItem(party, 0, makeItem('it.staff')).notes.join(' '));
     autosave();
     setTimeout(showVictory, 900);
+    return;
+
+  } else if (feat.type === 'exit') {                 // v7.1: an adventure won by finding the way out
+    questFlags.reachedExit = true;
+    say(feat.text || 'A way out, at last.');
+    sfx('chime');
+    autosave();
+    if (questComplete(questFlags, RULES)) setTimeout(showVictory, 900);
     return;
 
   } else if (feat.type === 'lever') {
