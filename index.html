@@ -731,6 +731,7 @@
       <button id="savePack">Export this adventure</button>
       <button id="dumpFloor">Export this floor</button>
       <button id="newDelve">Generate a delve…</button>
+      <button id="openWorkshop" title="Build your own floors and play-test them">The Workshop…</button>
       <button id="dumpState">Export a debug snapshot</button>
       <input type="file" id="packFile" accept="application/json,.json" hidden>
     </div>
@@ -859,7 +860,7 @@
   <button id="hintOk" class="primary">Got it</button></div></div>
 <div id="app">
   <header style="position:relative;padding-right:44px">
-    <h1>Mitz &amp; Simz Dungeon Delve <small>— v6.1.12</small></h1>
+    <h1>Mitz &amp; Simz Dungeon Delve <small>— v7.0</small></h1>
     <div id="hud">--</div>
     <button id="invBtn" aria-label="Packs and spells" title="Packs, and spells to cast between fights">Packs</button><button id="menuBtn" aria-label="Menu">☰</button>
   </header>
@@ -914,6 +915,7 @@
 <!-- v6.0: the corridor in 3D. Both optional: without them, or without WebGL 2, the view is drawn as before. -->
 <script src="msdd_materials.js"></script>
 <script src="msdd_view3d.js"></script>
+<script src="msdd_workshop.js"></script>
 <!-- The shared modules, Hold the Line's, unchanged, and both optional: without
      motion.js fights are drawn still (v4.5); without sound.js they are silent (v4.7). -->
 <script src="motion.js"></script>
@@ -11743,6 +11745,7 @@ function captureState() {
 }
 
 function saveTo(id, label) {
+  if (typeof window !== 'undefined' && window.WS_TESTING) return { ok: true, why: 'play-testing' };     // v7.0: a Workshop play-test saves nothing
   if (!party.length) return { ok: false, why: 'No party to save yet.' };
   if (label) currentSlotName = label;
   var blob = serialise(captureState());
@@ -12319,6 +12322,10 @@ function renderChooser() {
       'A fresh dungeon, generated and proven solvable before you set foot in it.' +
       (travelling ? ' Take a levelled party in and see how deep it goes.' : ''),
       'generate', function () { promptDelve(); });
+
+  if (typeof window !== 'undefined' && window.MSDDWorkshop) opt('The Workshop',
+      'Build a floor of your own: carve rooms, place monsters, doors and treasure, and play-test it as you go.',
+      'build', function () { window.MSDDWorkshop.open(); });
 
   opt('Load an adventure\u2026',
       'Open a pack file someone else wrote, or one you exported and edited.',
@@ -16874,6 +16881,10 @@ document.getElementById('sheetClose').addEventListener('click', function () {
 });
 document.getElementById('changeAdv').addEventListener('click', function () { openChooser(); });
 document.getElementById('leaveTown').addEventListener('click', closeTown);
+document.getElementById('openWorkshop').addEventListener('click', function () {
+  document.getElementById('menu').classList.remove('on');
+  if (window.MSDDWorkshop) window.MSDDWorkshop.open();
+});
 document.getElementById('portalBtn').addEventListener('click', usePortal);
 
 document.getElementById('rerollAll').addEventListener('click', rerollAll);

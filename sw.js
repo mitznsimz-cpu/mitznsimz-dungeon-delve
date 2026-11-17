@@ -4,13 +4,14 @@
    browser's HTTP cache, so even a new CACHE could hold old files): it took
    several refreshes to see a fix. Now one does, and offline still works.
    Bump CACHE on every release. */
-const CACHE = 'msdd-v6.1.12';
+const CACHE = 'msdd-v7.0.0';
 const ASSETS = [
   './',
   './index.html',
   './msdd_assets.js',          // wall textures; without it the walls are drawn as masonry
   './msdd_materials.js',       // v6.0: the 3D view's stone, wood, water and zones
   './msdd_view3d.js',          // v6.0: the 3D view; without it the view is drawn in 2D
+  './msdd_workshop.js',        // v7.0: the Workshop, the floor editor
   './motion.js',               // the shared motion module; without it fights are still
   './sound.js',                // the shared sound module; without it fights are silent
   './msdd.webmanifest',

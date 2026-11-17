@@ -268,6 +268,37 @@ Individual runners work too, if you're iterating on one area:
 node tests/harness_combat.js
 ```
 
+### The Workshop (v7.0, stage E1)
+
+A floor editor, opened from the adventure chooser or the menu (*The Workshop…*).
+It lives in `msdd_workshop.js`; its edits are in the `EDITOR CORE` block there,
+pure functions over a floor, and the `workshop` runner (55 checks) tests them.
+
+- **Tools:** Carve (drag a room or corridor out of rock; it joins open ground it
+  touches), Fill (back to rock), Walls (tap a square's edge), Terrain, Things
+  (the staff or a way out as the goal, monsters, doors, locked doors, secret
+  doors, chests, traps, fountains, altars, remains, camps, words on a square),
+  Start (where the party arrives; tap again to turn them), Erase and Inspect
+  (a thing's settings: which monster, which key, what a chest holds, its trap,
+  its words). Undo and redo, Ctrl+Z and Ctrl+Y.
+- **Walls stay in step:** every edit sets both sides of a wall together; the
+  runner checks it after 400 random edits.
+- **Checks as you go:** the game's `validatePack` and `proveSolvable` run after
+  each edit. Problems are listed; tapping one marks its square. Play-test is
+  off until there are no errors.
+- **Play-test:** the draft becomes a pack (the Ashkeld base for monsters, items
+  and town, the draft's floor in place of Ashkeld's) and a test party of level
+  1, 5 or 12 starts at the entry. Nothing is saved while testing; *Back to the
+  Workshop* reloads the real game from its untouched autosave.
+- **Keeping it:** the draft autosaves on the device. Export writes the pack as a
+  `.json` file (load it with *Load an adventure*); Import takes a pack's first
+  floor back in. *New floor…* starts from rock, an empty box or a generated
+  floor, at 12 to 30 squares a side.
+
+Next stages: E2 the 3D preview beside the grid, mechanisms (levers, plates,
+portcullises) and regions; E3 several floors joined by stairs, with a cover
+page; E4 copy and paste, room stamps, mirror and rotate.
+
 ### One more run (v6.1, the roadmap's v5.5)
 
 An endless delve is now a run. When the party falls, the run ends: a card

@@ -17,7 +17,7 @@
 # code is checked now, and the summary line is read from its output.
 cd "$(dirname "$0")/.." || exit 1
 fails=0
-for r in pack map party save combat town inventory world events vocab spells skills solve gen sprites chooser tierb roster look baseline minis terrain campaign motion bestiary sound dungeon rogue view3d run; do
+for r in pack map party save combat town inventory world events vocab spells skills solve gen sprites chooser tierb roster look baseline minis terrain campaign motion bestiary sound dungeon rogue view3d run workshop; do
   out=$(node tests/harness_${r}.js 2>&1)
   code=$?
   line=$(printf '%s\n' "$out" | grep -E '^(PASSED|FAILED)' | tail -1)
